@@ -36,12 +36,26 @@ func generate(builder: SceneTree) -> void:
 
 	for triangle: Array in data["pavement_triangles"]:
 		_triangle(triangle, 0.015, "road")
-	# Ensure long straight road segments dropped by unconstrained Delaunay triangulation are 100% paved.
+	# Ensure long straight road and sidewalk segments dropped by unconstrained Delaunay triangulation are 100% paved.
 	for road: Dictionary in data["roads"] + data["streets"]:
 		var r_pts: Array = road["points"]
 		var r_w: float = float(road["width"])
 		for i: int in range(r_pts.size() - 1):
-			b._strip(b._v(r_pts[i], 0.016), b._v(r_pts[i + 1], 0.016), r_w, "road")
+			var ra: Vector3 = b._v(r_pts[i], 0.016)
+			var rb: Vector3 = b._v(r_pts[i + 1], 0.016)
+			b._strip(ra, rb, r_w, "road")
+			var seg_len: float = ra.distance_to(rb)
+			if seg_len > 18.0:
+				var r_right: Vector3 = (rb - ra).normalized().cross(Vector3.UP)
+				var sw_steps: int = maxi(1, ceili(seg_len / 5.0))
+				for s: int in range(sw_steps):
+					var s0: Vector3 = ra.lerp(rb, float(s) / float(sw_steps))
+					var s1: Vector3 = ra.lerp(rb, float(s + 1) / float(sw_steps))
+					for side: float in [-1.0, 1.0]:
+						var sw_off: Vector3 = r_right * side * (r_w * 0.5 + 1.75)
+						var sw_mid: Vector3 = (s0 + s1) * 0.5 + sw_off
+						if b.map.get_road_distance(sw_mid) > 0.25:
+							b._strip(Vector3(s0.x + sw_off.x, 0.168, s0.z + sw_off.z), Vector3(s1.x + sw_off.x, 0.168, s1.z + sw_off.z), 3.4, "walk")
 	for triangle: Array in data["sidewalk_triangles"]:
 		_triangle(triangle, 0.17, "walk")
 	for pavement: Dictionary in data["pavement"]:

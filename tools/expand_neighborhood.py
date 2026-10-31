@@ -4,10 +4,11 @@ import math
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'.tools/gis_libs'))
+import shapely
 from shapely.geometry import Point,LineString,Polygon,box
 from shapely.ops import unary_union,polygonize,triangulate,nearest_points
 from recognizable_buildings import annotate
-from block_density import plan_blocks,fill_blocks
+from block_density import plan_blocks,fill_blocks,simple_polygons
 
 ROAD_TYPES={'primary','secondary','tertiary','residential','unclassified','living_street','primary_link','secondary_link','tertiary_link','service'}
 
@@ -52,7 +53,14 @@ def expand(data,ways,pts):
         street_ways.append((w,line));lines.append(line)
     # Complete street faces, not an arbitrary 200 m strip. Tiny traffic islands do not count as blocks.
     all_faces=list(polygonize(unary_union(lines)))
-    faces=[p for p in all_faces if 500<p.area<95000]
+    faces=[p for p in all_faces if 500<p.area<120000]
+    wmap={w['id']:[pts[n] for n in w['nodes'] if n in pts] for w in ways}
+    bways=[w for w in data.get('ramos_boundary_ways',[]) if w in wmap and len(wmap[w])>=2]
+    chain=[LineString(wmap[w]) for w in bways]
+    if 48799394 in wmap and 1259582401 in wmap and 129477783 in wmap:
+        chain.append(LineString([wmap[48799394][0],wmap[1259582401][-1]]))
+        chain.append(LineString([wmap[1259582401][0],wmap[129477783][0]]))
+    ramos_locality=unary_union(list(polygonize(unary_union(chain)))) if chain else Polygon()
     # 7-street bounding polygon: Díaz Vélez (and República to Gaona), Gaona, Güemes,
     # Av. de Mayo, General Alvarado, Viamonte, and Profesor Juan T. Pizzurno.
     polygon_7_streets=Polygon([
@@ -80,7 +88,7 @@ def expand(data,ways,pts):
         (-130.4, 238.8),
         (305.4, 240.4),
     ])
-    clip=box(min(xmin-60,-1680),-700,360,1060)
+    clip=box(-3150,-700,1300,2100)
     south=[];north=[]
     def route_z(x):
         near=route.interpolate(route.project(Point(x,0)))
@@ -90,14 +98,14 @@ def expand(data,ways,pts):
         return near.y
     # Southern first row touches the avenue; second row shares a street edge with the first.
     for p in faces:
-        if p.area<=900:continue
+        if p.area<=900 or p.area>=90000:continue
         c=p.representative_point()
         if not xmin-80<c.x<xmax+80:continue
         z=route_z(c.x)
         if c.y>z+6 and p.distance(route)<22 and c.y<z+260:south.append(p)
     second=[]
     for p in faces:
-        if p.area<=900:continue
+        if p.area<=900 or p.area>=90000:continue
         c=p.representative_point()
         if not xmin-80<c.x<xmax+80 or c.y<route_z(c.x)+20:continue
         if any(p.equals(q) for q in south):continue
@@ -106,20 +114,24 @@ def expand(data,ways,pts):
     northern_edges=[line for w,line in street_ways if w['tags'].get('loc_name')=='Segunda Rivadavia' or w['tags'].get('name') in ['Doctor Gabriel Ardoino','Leandro N. Alem']]
     north_edge=unary_union(northern_edges)
     for p in faces:
-        if p.area<=900:continue
+        if p.area<=900 or p.area>=90000:continue
         c=p.representative_point()
         if not xmin-80<c.x<xmax+80:continue
         if c.y<route_z(c.x)-20 and p.distance(north_edge)<1.0:north.append(p)
-    poly_buf=polygon_7_streets.buffer(8.0)
+    poly_buf=unary_union([polygon_7_streets.buffer(8.0),ramos_locality.buffer(12.0)])
+    shapely.prepare(poly_buf)
     poly_faces=[p for p in faces if poly_buf.covers(p.representative_point())]
     selected=list(south+second+north)
+    sel_union=unary_union(selected)
+    shapely.prepare(sel_union)
     for p in poly_faces:
-        if not any(p.equals(q) for q in selected):
+        if not sel_union.covers(p.representative_point()):
             selected.append(p)
     assert south and second and north and poly_faces,('missing block rows',len(south),len(second),len(north),len(poly_faces))
-    area=unary_union(selected+[polygon_7_streets.buffer(16),route.buffer(30),north_edge.intersection(clip).buffer(12)]).intersection(clip).buffer(9)
+    area=unary_union(selected+[polygon_7_streets.buffer(16),ramos_locality.buffer(16),route.buffer(30),north_edge.intersection(clip).buffer(12)]).intersection(clip).buffer(9)
+    shapely.prepare(area)
     # Extend corners to include complete buildings on the boundary of the selected blocks.
-    data['coverage']={'south_block_rows':2,'north_block_rows':1,'north_reference':'parallel street north of Sarmiento railway + 7-street polygon','boundary_streets':['Avenida Díaz Vélez','Avenida Gaona','Martín Miguel de Güemes','Avenida de Mayo','General Alvarado','Viamonte','Profesor Juan T. Pizzurno'],'block_counts':{'south_first':len(south),'south_second':len(second),'north':len(north),'polygon_7_streets':len(poly_faces),'total':len(selected)},'polygons':[list(p.exterior.coords)[:-1] for p in parts(area) if p.geom_type=='Polygon'],'bounds':list(area.bounds)}
+    data['coverage']={'south_block_rows':2,'north_block_rows':1,'north_reference':'full locality of Ramos Mejía (OSM relation 1748197)','locality':'Ramos Mejía','boundary_streets':['Avenida Díaz Vélez','Avenida República','Avenida Gaona','Blas Parera','Avenida Rivadavia','Fray Cayetano Rodríguez','Avenida Don Bosco','Avenida Eva Perón','Martín Miguel de Güemes','Avenida de Mayo','General Alvarado','Viamonte','Profesor Juan T. Pizzurno'],'block_counts':{'south_first':len(south),'south_second':len(second),'north':len(north),'locality_blocks':len(poly_faces),'total':len(selected)},'polygons':[list(p.exterior.coords)[:-1] for p in parts(area) if p.geom_type=='Polygon'],'bounds':list(area.bounds)}
     streets=[]
     riv_corridor=box(xmin+0.5,-250,xmax-0.5,250)
     for w,line in street_ways:
@@ -142,7 +154,10 @@ def expand(data,ways,pts):
             except ValueError:height=6.2
             source_height=height
             if height<=0:height=3.1
-            buildings.append({'osm_id':w['id'],'points':p[:-1],'height':height,'source_height':source_height,'height_source':('assumed_minimum_invalid_OSM' if source_height<=0 else ('OSM' if 'height' in t or 'building:levels' in t else 'assumed_2_levels')),'name':t.get('name',''),'type':t['building']})
+            poly=Polygon(p).buffer(0)
+            for sp in simple_polygons(poly):
+                if sp.area<2.0 or not area.intersects(sp):continue
+                buildings.append({'osm_id':w['id'],'points':list(sp.exterior.coords)[:-1],'height':height,'source_height':source_height,'height_source':('assumed_minimum_invalid_OSM' if source_height<=0 else ('OSM' if 'height' in t or 'building:levels' in t else 'assumed_2_levels')),'name':t.get('name',''),'type':t['building']})
         if t.get('railway')=='rail':
             for segment in parts(line.intersection(area.buffer(12))):
                 if segment.geom_type=='LineString':railways.append({'osm_id':w['id'],'points':list(segment.coords)})
@@ -166,8 +181,10 @@ def expand(data,ways,pts):
     road_polygons=unary_union([LineString(r['points']).buffer(r['width']/2,cap_style=2,join_style=2) for r in data['roads']+streets])
     data['pavement']=[{'outer':list(p.exterior.coords)[:-1],'holes':[list(r.coords)[:-1] for r in p.interiors]} for p in parts(road_polygons) if p.geom_type=='Polygon']
     for key,geometry in [('pavement_triangles',road_polygons),('sidewalk_triangles',road_polygons.buffer(3.5,join_style=2).difference(road_polygons))]:
-        seg=geometry.segmentize(8.0)
-        data[key]=[list(t.exterior.coords)[:-1] for p in parts(seg) if p.geom_type=='Polygon' for t in triangulate(p) if p.covers(t.representative_point()) and p.buffer(0.02).covers(t)]
+        p_buf=geometry.buffer(0.02)
+        shapely.prepare(geometry)
+        shapely.prepare(p_buf)
+        data[key]=[list(t.exterior.coords)[:-1] for p in parts(geometry) if p.geom_type=='Polygon' for t in triangulate(p) if geometry.covers(t.representative_point()) and p_buf.covers(t)]
     density_plan=plan_blocks(data,ways,pts,selected,area,road_polygons,hospital_campus,plaza)
     occupied=[Polygon(b['points']).buffer(1.5) for b in buildings]
     occupied.append(density_plan['reserved'])
@@ -176,11 +193,16 @@ def expand(data,ways,pts):
     occupied += [line.buffer(9) for line in rail]
     occupied += [road_polygons.buffer(3.4),plaza.buffer(1)]
     unavailable=unary_union(occupied)
-    generated=[]
+    shapely.prepare(unavailable)
+    generated=[];generated_fronts=[];gen_grid={}
     for road in data['roads']+streets:
         if road.get('bridge'):continue
         line=LineString(road['points'])
-        for station in range(10,int(line.length)-5,12):
+        mid_pt=line.interpolate(line.length*0.5)
+        if not (-1680<mid_pt.x<120 and -240<mid_pt.y<380):continue
+        step=16
+        half_w=5.0
+        for station in range(10,int(line.length)-5,step):
             p=line.interpolate(station);a=line.interpolate(max(0,station-1));b=line.interpolate(min(line.length,station+1))
             dx,dy=b.x-a.x,b.y-a.y;length=math.hypot(dx,dy)
             if length<.01:continue
@@ -189,10 +211,16 @@ def expand(data,ways,pts):
                 nx,ny=-uy*side,ux*side
                 offset=road['width']/2+3.7
                 base=(p.x+nx*offset,p.y+ny*offset)
-                polygon=Polygon([(base[0]+ux*t+nx*d,base[1]+uy*t+ny*d) for t,d in [(-4.5,0),(4.5,0),(4.5,16),(-4.5,16)]])
-                if not area.covers(polygon) or unavailable.intersects(polygon) or any(polygon.intersects(q) for q in generated):continue
+                coords=[(base[0]+ux*t+nx*d,base[1]+uy*t+ny*d) for t,d in [(-half_w,0),(half_w,0),(half_w,16),(-half_w,16)]]
+                polygon=Polygon(coords)
+                if not area.covers(polygon) or unavailable.intersects(polygon):continue
+                gx,gz=int(base[0]//28),int(base[1]//28)
+                nearby=[q for kx in (gx-1,gx,gx+1) for kz in (gz-1,gz,gz+1) for q in gen_grid.get((kx,kz),[])]
+                if any(polygon.intersects(q) for q in nearby):continue
+                gen_grid.setdefault((gx,gz),[]).append(polygon)
                 generated.append(polygon)
-    data['generated_buildings']=[{'osm_id':0,'generated_id':i,'points':list(p.exterior.coords)[:-1],'height':3.2*(1+i%3),'height_source':'generic infill','name':'','type':'generic_frontage'} for i,p in enumerate(generated)]
+                generated_fronts.append({'distance':offset,'a':list(coords[0]),'b':list(coords[1]),'towards':[-nx*offset,-ny*offset]})
+    data['generated_buildings']=[{'osm_id':0,'generated_id':i,'points':list(p.exterior.coords)[:-1],'height':3.2*(1+i%3),'height_source':'generic infill','name':'','type':'generic_frontage','front':generated_fronts[i]} for i,p in enumerate(generated)]
     frontage_buildings=list(data['generated_buildings'])
     fill_blocks(data,density_plan)
     tree_forbidden=unary_union([
@@ -202,12 +230,16 @@ def expand(data,ways,pts):
         unary_union([line.buffer(8.5) for line in rail]),
         plaza.buffer(6.0),
     ])
+    shapely.prepare(tree_forbidden)
     kept_trees=[p for p in data.get('trees',[]) if area.covers(Point(p)) and not tree_forbidden.covers(Point(p))]
+    tree_grid={}
+    for t in kept_trees:
+        tree_grid.setdefault((int(t[0]//20),int(t[1]//20)),[]).append(t)
     for road in streets:
         if road.get('bridge'):continue
         line=LineString(road['points'])
         if line.length<40:continue
-        for dist_s in range(18,int(line.length)-14,32):
+        for dist_s in range(18,int(line.length)-14,36):
             p=line.interpolate(dist_s);a=line.interpolate(max(0,dist_s-1));b=line.interpolate(min(line.length,dist_s+1))
             dx,dy=b.x-a.x,b.y-a.y;length=math.hypot(dx,dy)
             if length<.01:continue
@@ -217,11 +249,15 @@ def expand(data,ways,pts):
                 offset=road['width']/2+1.85
                 cand=Point(p.x+nx*offset,p.y+ny*offset)
                 if not area.covers(cand) or tree_forbidden.covers(cand):continue
-                if any(math.hypot(cand.x-t[0],cand.y-t[1])<14.0 for t in kept_trees):continue
-                kept_trees.append([round(cand.x,2),round(cand.y,2)])
+                tx,tz=int(cand.x//20),int(cand.y//20)
+                t_near=[ q for kx in (tx-1,tx,tx+1) for kz in (tz-1,tz,tz+1) for q in tree_grid.get((kx,kz),[]) ]
+                if any(math.hypot(cand.x-t[0],cand.y-t[1])<14.0 for t in t_near):continue
+                pt_arr=[round(cand.x,2),round(cand.y,2)]
+                kept_trees.append(pt_arr)
+                tree_grid.setdefault((tx,tz),[]).append(pt_arr)
     data['trees']=kept_trees
     street_axis=unary_union([LineString(r['points']) for r in data['roads']+streets])
-    for building in buildings+frontage_buildings:
+    for building in buildings:
         polygon=Polygon(building['points']);vertices=list(polygon.exterior.coords)
         best=None
         for a,b in zip(vertices,vertices[1:]):

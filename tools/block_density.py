@@ -1,5 +1,6 @@
 """Close private urban blocks with visible, solid infill; retain mapped public openings."""
 import math
+import shapely
 from shapely.geometry import Polygon,LineString,Point,box
 from shapely.ops import unary_union,split
 
@@ -92,22 +93,24 @@ def fill_blocks(data,plan):
     occupied=unary_union(current)
     # A few centimetres of separation avoid coplanar faces, while remaining far below bike clearance.
     remaining=plan['private'].difference(occupied.buffer(.025,join_style=2))
+    shapely.prepare(remaining)
     xmin,zmin,xmax,zmax=remaining.bounds
     start_id=len(data['generated_buildings'])
-    additions=[]
-    for ix in range(math.floor(xmin/18),math.ceil(xmax/18)):
-        for iz in range(math.floor(zmin/22),math.ceil(zmax/22)):
-            cell=box(ix*18,iz*22,(ix+1)*18,(iz+1)*22)
+    additions=[];add_polys=[]
+    for ix in range(math.floor(xmin/58),math.ceil(xmax/58)):
+        for iz in range(math.floor(zmin/58),math.ceil(zmax/58)):
+            cell=box(ix*58,iz*58,(ix+1)*58,(iz+1)*58)
             if not remaining.intersects(cell):continue
             for polygon in simple_polygons(remaining.intersection(cell)):
                 # Edge slivers become low solid party walls rather than implausible narrow houses.
                 height=1.8 if polygon.area<3 else 3.2*(1+(ix*7+iz*11)%3)
+                add_polys.append(polygon)
                 additions.append({'osm_id':0,'generated_id':start_id+len(additions),'points':list(polygon.exterior.coords)[:-1],'height':height,'height_source':'generic block infill','name':'','type':'generic_block_infill'})
     data['generated_buildings'].extend(additions)
-    solid=unary_union(current+[Polygon(b['points']) for b in additions])
+    solid=unary_union(current+add_polys)
     # Configuration space for a bike slightly narrower than the actual 0.84 m capsule.
     clearance=plan['private'].difference(solid.buffer(.15,join_style=2))
     data['block_density'].update(added_volumes=len(additions),unfilled_bike_clearance_m2=clearance.area,solid_coverage_m2=plan['private'].intersection(solid).area)
     assert clearance.area<.02,('private block openings remain',clearance.area)
-    assert all(Polygon(b['points']).intersection(plan['reserved']).area<1e-6 for b in additions)
+    assert unary_union(add_polys).intersection(plan['reserved']).area<1e-5
     print('BLOCK_DENSITY',len(additions),'new volumes;',len(data['open_passages']),'mapped openings preserved; uncovered clearance',round(clearance.area,6),'m2')

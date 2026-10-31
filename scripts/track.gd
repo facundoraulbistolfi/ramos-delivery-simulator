@@ -7,6 +7,8 @@ var centerline: PackedVector3Array = PackedVector3Array()
 var _distances: PackedFloat32Array = PackedFloat32Array()
 var _length: float = 0.0
 var _road_segments: Array = []
+var _road_grid: Dictionary = {}
+const GRID_SIZE: float = 120.0
 
 func _ready() -> void:
 	load_map_data()
@@ -23,10 +25,26 @@ func load_map_data() -> void:
 		_length += centerline[i-1].distance_to(centerline[i])
 		_distances.append(_length)
 	_road_segments.clear()
+	_road_grid.clear()
 	for road: Dictionary in data["roads"]+data.get("streets",[]):
 		var points: Array=road["points"]
 		for i: int in range(points.size()-1):
-			_road_segments.append({"a":Vector2(float(points[i][0]),float(points[i][1])),"b":Vector2(float(points[i+1][0]),float(points[i+1][1])),"width":float(road["width"]),"name":str(road.get("name","Avenida Rivadavia"))})
+			var a: Vector2 = Vector2(float(points[i][0]),float(points[i][1]))
+			var b: Vector2 = Vector2(float(points[i+1][0]),float(points[i+1][1]))
+			if a.distance_squared_to(b) < 0.0001:
+				continue
+			var seg: Dictionary = {"a":a,"b":b,"width":float(road["width"]),"name":str(road.get("name","Avenida Rivadavia"))}
+			_road_segments.append(seg)
+			var x0: int = floori((minf(a.x, b.x) - 25.0) / GRID_SIZE)
+			var x1: int = floori((maxf(a.x, b.x) + 25.0) / GRID_SIZE)
+			var z0: int = floori((minf(a.y, b.y) - 25.0) / GRID_SIZE)
+			var z1: int = floori((maxf(a.y, b.y) + 25.0) / GRID_SIZE)
+			for gx: int in range(x0, x1 + 1):
+				for gz: int in range(z0, z1 + 1):
+					var cell: Vector2i = Vector2i(gx, gz)
+					if not _road_grid.has(cell):
+						_road_grid[cell] = []
+					(_road_grid[cell] as Array).append(seg)
 
 func get_spawn_transform() -> Transform3D:
 	var forward: Vector3 = (centerline[1]-centerline[0]).normalized()
@@ -60,7 +78,9 @@ func get_road_distance(world_position: Vector3) -> float:
 	var p: Vector3 = to_local(world_position)
 	var nearest: float = INF
 	var flat: Vector2=Vector2(p.x,p.z)
-	for segment: Dictionary in _road_segments:
+	var cell: Vector2i = Vector2i(floori(flat.x / GRID_SIZE), floori(flat.y / GRID_SIZE))
+	var candidates: Array = _road_grid.get(cell, _road_segments)
+	for segment: Dictionary in candidates:
 		var a: Vector2=segment["a"]
 		var b: Vector2=segment["b"]
 		var t: float=clampf((flat-a).dot(b-a)/(b-a).length_squared(),0.0,1.0)
@@ -72,7 +92,9 @@ func get_crossing_name(world_position: Vector3) -> String:
 		var p: Vector2=Vector2(world_position.x,world_position.z)
 		var nearest: float=INF
 		var name: String="Entorno de Ramos Mejía"
-		for segment: Dictionary in _road_segments:
+		var cell: Vector2i = Vector2i(floori(p.x / GRID_SIZE), floori(p.y / GRID_SIZE))
+		var candidates: Array = _road_grid.get(cell, _road_segments)
+		for segment: Dictionary in candidates:
 			var a: Vector2=segment["a"]
 			var b: Vector2=segment["b"]
 			var t: float=clampf((p-a).dot(b-a)/(b-a).length_squared(),0.0,1.0)

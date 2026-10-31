@@ -33,6 +33,8 @@ def main():
     for e in tree.findall('way'):
         ways.append({'id': int(e.attrib['id']), 'tags': {t.attrib['k']: t.attrib['v'] for t in e.findall('tag')},
                      'nodes': [int(n.attrib['ref']) for n in e.findall('nd')]})
+    ramos_rel = next((r for r in tree.findall('relation') if r.attrib.get('id') == '1748197'), None)
+    ramos_boundary_ways = [int(m.attrib['ref']) for m in ramos_rel.findall('member') if m.attrib.get('type') == 'way'] if ramos_rel is not None else []
     riv = [w for w in ways if w['tags'].get('highway') == 'primary' and 'Rivadavia' in w['tags'].get('name','')]
     rnodes = {i for w in riv for i in w['nodes']}
     endpoints = {}
@@ -152,7 +154,7 @@ def main():
     data={'name':'Ramos Mejia - Avenida Rivadavia','attribution':'© OpenStreetMap contributors · ODbL 1.0','source_url':SOURCE_URL,'retrieved':'2026-10-30',
           'projection':{'type':'local_equirectangular','origin_lat':LAT,'origin_lon':LON,'earth_radius_m':R,'axes':'X east, Y up, Z south','units':'metres'},
           'endpoints':{n:{'osm_node_id':i,'lat_lon':geo[i],'point':pts[i]} for n,i in endpoints.items()},
-          'route':{'points':line,'osm_node_ids':route,'length_m':dist[end]},'roads':roads,'sections':sections,'crossings':crosses,'buildings':buildings,'railways':railways,'landmarks':landmarks,'trees':vegetation}
+          'route':{'points':line,'osm_node_ids':route,'length_m':dist[end]},'roads':roads,'sections':sections,'crossings':crosses,'buildings':buildings,'railways':railways,'landmarks':landmarks,'trees':vegetation,'ramos_boundary_ways':ramos_boundary_ways}
     data=expand(data,ways,pts)
     out=ROOT/'assets/maps/ramos_mejia.json'
     out.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8')
