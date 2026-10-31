@@ -23,6 +23,11 @@ var _toast_remaining: float = 0.0
 var _pause_overlay: ColorRect
 var _resume_button: Button
 var _route_bar: ProgressBar
+var _mission_header_label: Label
+var _mission_step_label: Label
+var _mission_target_label: Label
+var _mission_ref_label: Label
+var _mission_item_label: Label
 
 
 func _ready() -> void:
@@ -34,6 +39,7 @@ func _ready() -> void:
 	screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(screen)
 	_build_brand(screen)
+	_build_mission_panel(screen)
 	_build_timing(screen)
 	_build_controls(screen)
 	_build_speedometer(screen)
@@ -56,8 +62,28 @@ func update_route(speed_kmh: float, boost_ratio: float, station: float, length_m
 	_boost_bar.value = boost_ratio
 	_lap_label.text = "%04d / %04d METROS" % [roundi(station), roundi(length_m)]
 	_time_label.text = _format_time(elapsed)
-	_best_label.text = crossing
+	_best_label.text = "CALLE: " + crossing
 	_route_bar.value = station / length_m
+
+
+func update_mission(state_data: Dictionary) -> void:
+	if not is_instance_valid(_mission_target_label):
+		return
+	var st: int = int(state_data.get("state", 0))
+	var completed: int = int(state_data.get("completed", 0))
+	_mission_header_label.text = "REPARTO A OJO EN RAMOS · ENTREGAS: %d" % completed
+	if st == 1:
+		_mission_step_label.text = "[PASO 1/2] RETIRAR PEDIDO EN LOCAL:"
+		_mission_step_label.add_theme_color_override("font_color", ORANGE)
+		_mission_target_label.text = str(state_data.get("locale_name", "")).to_upper()
+		_mission_ref_label.text = "%s (%s)" % [str(state_data.get("locale_address", "")), str(state_data.get("locale_between", ""))]
+		_mission_item_label.text = "Pedido: %s  [M: Cambiar]" % str(state_data.get("order_item", ""))
+	elif st == 2:
+		_mission_step_label.text = "[PASO 2/2] LLEVAR A DIRECCIÓN:"
+		_mission_step_label.add_theme_color_override("font_color", Color("28e070"))
+		_mission_target_label.text = str(state_data.get("dest_address", "")).to_upper()
+		_mission_ref_label.text = "%s · Ramos Mejía" % str(state_data.get("dest_between", ""))
+		_mission_item_label.text = "Llevando: %s (%s)" % [str(state_data.get("order_item", "")), str(state_data.get("locale_name", ""))]
 
 
 func _process(delta: float) -> void:
@@ -89,7 +115,17 @@ func _build_brand(screen: Control) -> void:
 	var rows: VBoxContainer = _rows(panel, 1)
 	var title: Label = _label(rows, "RAMOS MEJÍA", 28, PAPER)
 	title.add_theme_constant_override("outline_size", 0)
-	_label(rows, "RIVADAVIA · LARREA → NECOCHEA", 12, ORANGE)
+	_label(rows, "LOCALIDAD COMPLETA · REPARTO & LIBRE", 12, ORANGE)
+
+
+func _build_mission_panel(screen: Control) -> void:
+	var panel: PanelContainer = _panel(screen, Rect2(28.0, 150.0, 440.0, 152.0))
+	var rows: VBoxContainer = _rows(panel, 4)
+	_mission_header_label = _label(rows, "REPARTO A OJO EN RAMOS · ENTREGAS: 0", 11, CYAN)
+	_mission_step_label = _label(rows, "[PASO 1/2] RETIRAR PEDIDO EN LOCAL:", 12, ORANGE)
+	_mission_target_label = _label(rows, "CARGANDO PEDIDO...", 20, PAPER)
+	_mission_ref_label = _label(rows, "Buscando dirección en Ramos Mejía", 13, CYAN)
+	_mission_item_label = _label(rows, "Guiate por los carteles de las calles (M: Nuevo pedido)", 11, MUTED)
 
 
 func _build_timing(screen: Control) -> void:
@@ -107,7 +143,7 @@ func _build_controls(screen: Control) -> void:
 	_label(rows, "RECORRIDO LIBRE · ESCALA 1:1", 12, ORANGE)
 	_label(rows, "W / ↑  Acelerar     S / ↓  Frenar     A / D / ← / →  Girar", 13, PAPER)
 	_label(rows, "SHIFT  Turbo     ESPACIO  Derrape     R  Volver a Larrea", 13, PAPER)
-	_label(rows, "C  Cámara     T  Ir a La Tanga     ESC  Pausa", 12, MUTED)
+	_label(rows, "C  Cámara     T  Ir a La Tanga     M  Nuevo Pedido     ESC  Pausa", 12, MUTED)
 	_label(rows, "VISITAR:  1  San Juan de Dios     2  Coto     3  La Perla", 12, CYAN)
 
 

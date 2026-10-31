@@ -1,6 +1,6 @@
 # Ramos Mejía · Motos 3D
 
-Mapa de **Ramos Mejía**, con eje en **Avenida Rivadavia (entre Larrea y Necochea)** y cobertura completa del **polígono de 7 calles** conformado por **Díaz Vélez (y República hasta Gaona), Av. Gaona, Güemes, Av. de Mayo, Alvarado, Viamonte y Juan T. Pizzurno**. **Godot 4.4 o superior**, GDScript y renderizador Compatibility. Escala: **1 unidad = 1 metro**.
+Mapa completo de la localidad de **Ramos Mejía** (límite administrativo OSM `relation 1748197`, **8,11 km²**, **577 manzanas urbanas**), con eje en **Avenida Rivadavia**. **Godot 4.4 o superior**, GDScript y renderizador Compatibility. Escala: **1 unidad = 1 metro**.
 
 ## Abrir y jugar
 
@@ -33,17 +33,21 @@ La copia del motor en `.tools/` queda fuera de Git. No hay dependencias, plugins
 | 1 | Visitar Casa Hospital San Juan de Dios |
 | 2 | Visitar Coto de Rivadavia y Pueyrredón |
 | 3 | Visitar La Perla de Rivadavia y Avenida de Mayo |
+| M | Cambiar / pedir nuevo pedido de reparto («Ir a ojo») |
 | Esc | Pausar / continuar |
 
 ## Incluye
 
-- Moto y piloto de geometría simple, ruedas animadas e inclinación al girar.
+- Moto y piloto de geometría simple, ruedas animadas, inclinación al girar y caja térmica de reparto en la parrilla trasera al retirar pedidos.
 - Control arcade con gravedad, colisiones, turbo, derrape y penalización de velocidad fuera del asfalto.
 - Cámara de seguimiento con dos distancias y prevención de obstáculos.
-- Tramo de unos **1.648 metros**, con las curvas, calzadas separadas, cruces y distancias de OpenStreetMap.
-- Red ampliada de **199 tramos de calles**, 100 manzanas urbanas completas en el polígono **Díaz Vélez – Gaona – Güemes – Av. de Mayo – Alvarado – Viamonte – Juan T. Pizzurno** (más el corredor de Rivadavia hasta Necochea), vías y andenes del Sarmiento y espacios verdes.
-- **320 edificios con huellas de OSM** y **5.903 volúmenes genéricos** de frentes e interiores de manzana, con 125 pasajes públicos preservados. Los volúmenes cierran los huecos privados y tienen colisión; no representan edificios individualmente relevados.
-- Tres edificios reconocibles con arquitectura propia: San Juan de Dios (conjunto blanco, bandas de ventanas, guardia, palmeras y jardines), Coto (cartelería roja, vidrieras, entrada y frente lateral sobre Pueyrredón) y La Perla (ochava vidriada, toldos verdes, letras y mesas exteriores). Las variantes conservan las huellas de los edificios, con alturas y detalles aproximados.
+- Tramo de unos **1.648 metros** sobre Av. Rivadavia, con las curvas, calzadas separadas, cruces y distancias de OpenStreetMap.
+- Red vial extendida a toda la localidad de **Ramos Mejía**: **568 tramos de calles**, **577 manzanas urbanas completas** (**8,11 km²**), vías y andenes del FF.CC. Sarmiento y espacios verdes.
+- **636 edificios con huellas de OSM** y **23.809 volúmenes genéricos** de frentes e interiores de manzana, con **166 pasajes públicos** preservados. Los volúmenes cierran los huecos privados y tienen colisión; no representan edificios individualmente relevados.
+- Tres edificios emblemáticos a gran escala: San Juan de Dios (conjunto blanco, bandas de ventanas, guardia, palmeras y jardines), Coto (cartelería roja, vidrieras, entrada y frente lateral sobre Pueyrredón) y La Perla (ochava vidriada, toldos verdes, letras y mesas exteriores).
+- **27 locales, clubes e instituciones detalladas en 3D** con fachadas propias, marquesinas, neones, toldos, mesas en vereda y cartelera: **Apolonia**, **Faricci** (2 sucursales), **Due**, **Lucciano's**, **Banned Burger**, **Clöe Burger**, **La Birra Bar**, **Farmacia Moreno**, **Farmacia Central Oeste** (2 sucursales), **SportClub Ramos Mejía**, **Club Bomberitos**, **Cuartel Central de Bomberos Voluntarios**, **La Casa de Oberón**, **Antojos**, **Samurai Sushi**, **Otaku Sushi**, **La Tanita** (2 sucursales), **La Buena Fama**, **Gallegol**, **El Muro Escalada**, **Sociedad de Socorros Mutuos**, **Centro de Día CAVIDI**, **Vinicius** y **Mata Club**.
+- **4 plazas detalladas** con monumentos, pérgolas, mástiles y juegos infantiles: **Plaza Domingo Faustino Sarmiento**, **Plazoleta Gral. Manuel Belgrano** (con monumento ecuestre y mástil), **Plaza Bartolomé Mitre** y **Plaza Bomberitos** (con monumento al Bombero Voluntario), además de **El Muro de Ramos** (galería de murales urbanos sobre el muro ferroviario de Leandro N. Alem / Gral. Soler).
+- **Sistema de misiones de reparto «Ir a ojo»**: sin GPS ni flechas guía; el jugador consulta la dirección y entrecalles del local en el HUD para retirar el pedido y luego busca la dirección de entrega en Ramos Mejía guiándose por los carteles nomencladores de las esquinas y el indicador de calle actual.
 - Veredas, señalización, pasos peatonales, locales genéricos, árboles, luminarias y refugios de colectivos.
 - Circulación libre: se retiraron los límites invisibles y los cierres laterales. Todos los edificios, incluidos los de relleno, tienen colisión. Un plano físico infinito evita caídas fuera del área modelada.
 - Manzanas privadas continuas: se completan los centros y los huecos entre construcciones con casas, volúmenes y medianeras visibles. Se conservan los pasajes exteriores cartografiados, las plazas, las veredas y los accesos a los edificios reconocibles. El predio del hospital conserva sus jardines y tiene cerramiento perimetral con entradas.
@@ -65,7 +69,8 @@ scripts/bike.gd            Física y parámetros de conducción
 scripts/track.gd           Consulta de calzadas, distancias y cruces
 scripts/chase_camera.gd    Cámara de seguimiento
 scripts/game.gd            Entradas, recorrido libre y reinicio
-scripts/hud.gd             Interfaz y pausa
+scripts/hud.gd             Interfaz, panel de reparto y pausa
+scripts/mission_system.gd  Sistema de misiones de reparto «a ojo»
 assets/icon.svg            Ícono del proyecto
 assets/maps/              Datos métricos, fuente OSM y atribución
 tools/prepare_ramos_map.py Extracción geográfica reproducible

@@ -1,9 +1,11 @@
 extends Node3D
 ## Free ride around the neighborhood. R returns to Larrea; 1/2/3 visit landmarks.
+const MissionSystem = preload("res://scripts/mission_system.gd")
 var elapsed: float = 0.0
 var _started: bool = false
 var _paused: bool = false
 var _end_message_shown: bool = false
+var mission_system: Node3D
 @onready var track: MotoTrack = $Track
 @onready var bike: MotoBike = $Moto
 @onready var hud: MotoHUD = $HUD
@@ -13,6 +15,12 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_setup_inputs()
 	_reset_session()
+	mission_system = MissionSystem.new()
+	mission_system.name = "MissionSystem"
+	add_child(mission_system)
+	mission_system.mission_updated.connect(hud.update_mission)
+	mission_system.mission_notification.connect(hud.show_message)
+	mission_system.setup(track, bike)
 	hud.resume_requested.connect(func() -> void: _set_paused(false))
 	hud.restart_requested.connect(_restart_from_pause)
 
@@ -46,6 +54,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_visit_building("coto")
 	elif event.is_action_pressed("visit_perla") and not _paused:
 		_visit_building("la_perla")
+	elif event.is_action_pressed("new_mission") and not _paused and mission_system != null:
+		mission_system.start_new_mission(true)
 
 func _visit_building(key: String) -> void:
 	bike.respawn(track.get_building_spawn_transform(key))
@@ -85,6 +95,7 @@ func _setup_inputs() -> void:
 	_bind("visit_hospital",[KEY_1])
 	_bind("visit_coto",[KEY_2])
 	_bind("visit_perla",[KEY_3])
+	_bind("new_mission",[KEY_M])
 
 func _bind(action: StringName, keys: Array) -> void:
 	if not InputMap.has_action(action): InputMap.add_action(action)
