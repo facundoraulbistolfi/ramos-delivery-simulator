@@ -56,8 +56,8 @@ def plan_blocks(data,ways,pts,selected,area,road_polygons,hospital_campus,plaza)
         greens.append(polygon)
         tags=source.get(int(landmark.get('osm_id',0)),{}).get('tags',{})
         if tags.get('access') in ['no','private']:private_gardens.append(polygon)
-    railway=unary_union([LineString(r['points']).buffer(16) for r in data['railways']])
-    platforms=[Polygon(p['points']).buffer(4) for p in data['landmarks'] if p['type']=='platform']
+    railway=unary_union([LineString(r['points']).buffer(16,cap_style=2,join_style=2) for r in data['railways']])
+    platforms=[Polygon(p['points']).buffer(4,join_style=2) for p in data['landmarks'] if p['type']=='platform']
     # Shopfront sidewalks and hospital access must not become thin new buildings.
     forecourts=[]
     for site in data['recognizable_buildings']:
@@ -66,7 +66,7 @@ def plan_blocks(data,ways,pts,selected,area,road_polygons,hospital_campus,plaza)
         for front in fronts:
             a,c=front['a'],front['b'];nx,nz=front['normal']
             forecourts.append(Polygon([a,c,(c[0]+nx*12.5,c[1]+nz*12.5),(a[0]+nx*12.5,a[1]+nz*12.5)]))
-    public_open=unary_union(greens+[p['area'] for p in passages]+[railway,plaza.buffer(.5)]+platforms+forecourts)
+    public_open=unary_union(greens+[p['area'] for p in passages]+[railway,plaza.buffer(.5,join_style=2)]+platforms+forecourts)
     reserved=unary_union([public_open,hospital_campus])
     # Street-edge faces are clipped back to the real road widths and sidewalks.
     interiors=unary_union(selected).intersection(area).difference(road_polygons.buffer(3.5,join_style=2))
@@ -76,8 +76,8 @@ def plan_blocks(data,ways,pts,selected,area,road_polygons,hospital_campus,plaza)
     hospital=next(s for s in data['recognizable_buildings'] if s['key']=='san_juan')
     a,c=hospital['front']['a'],hospital['front']['b']
     middle=((a[0]+c[0])/2,(a[1]+c[1])/2);normal=hospital['front']['normal']
-    gate=LineString([(middle[0]-normal[0]*3,middle[1]-normal[1]*3),(middle[0]+normal[0]*22,middle[1]+normal[1]*22)]).buffer(6,cap_style=2)
-    mapped_gates=unary_union([p['area'].buffer(.2) for p in passages]+[gate])
+    gate=LineString([(middle[0]-normal[0]*3,middle[1]-normal[1]*3),(middle[0]+normal[0]*22,middle[1]+normal[1]*22)]).buffer(6,cap_style=2,join_style=2)
+    mapped_gates=unary_union([p['area'].buffer(.2,join_style=2) for p in passages]+[gate])
     for index,polygon in enumerate([hospital_campus]+private_gardens):
         boundary=polygon.boundary.difference(mapped_gates) if index==0 else polygon.boundary
         for line in parts(boundary):
@@ -85,7 +85,7 @@ def plan_blocks(data,ways,pts,selected,area,road_polygons,hospital_campus,plaza)
                 property_walls.append({'points':list(line.coords),'height':1.8,'kind':'hospital_perimeter' if index==0 else 'private_garden'})
     data['open_passages']=[{k:v for k,v in p.items() if k!='area'} for p in passages]
     data['property_walls']=property_walls
-    data['block_density']={'method':'continuous visible infill in private block interiors','private_regions':[list(p.exterior.coords)[:-1] for p in simple_polygons(private)],'private_area_m2':private.area,'public_open_regions':[list(p.exterior.coords)[:-1] for p in simple_polygons(public_open.intersection(area))],'preserved_passages':len(passages)}
+    data['block_density']={'method':'continuous visible infill in private block interiors','private_regions':[list(p.simplify(0.05,preserve_topology=True).exterior.coords)[:-1] for p in simple_polygons(private)],'private_area_m2':private.area,'public_open_regions':[list(p.exterior.coords)[:-1] for p in simple_polygons(public_open.intersection(area))],'preserved_passages':len(passages)}
     return {'reserved':reserved,'private':private}
 
 def fill_blocks(data,plan):
@@ -97,9 +97,9 @@ def fill_blocks(data,plan):
     xmin,zmin,xmax,zmax=remaining.bounds
     start_id=len(data['generated_buildings'])
     additions=[];add_polys=[]
-    for ix in range(math.floor(xmin/58),math.ceil(xmax/58)):
-        for iz in range(math.floor(zmin/58),math.ceil(zmax/58)):
-            cell=box(ix*58,iz*58,(ix+1)*58,(iz+1)*58)
+    for ix in range(math.floor(xmin/85),math.ceil(xmax/85)):
+        for iz in range(math.floor(zmin/85),math.ceil(zmax/85)):
+            cell=box(ix*85,iz*85,(ix+1)*85,(iz+1)*85)
             if not remaining.intersects(cell):continue
             for polygon in simple_polygons(remaining.intersection(cell)):
                 # Edge slivers become low solid party walls rather than implausible narrow houses.

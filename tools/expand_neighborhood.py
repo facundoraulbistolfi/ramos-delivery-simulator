@@ -7,7 +7,7 @@ sys.path.insert(0,str(ROOT/'.tools/gis_libs'))
 import shapely
 from shapely.geometry import Point,LineString,Polygon,box
 from shapely.ops import unary_union,polygonize,triangulate,nearest_points
-from recognizable_buildings import annotate
+from recognizable_buildings import annotate,annotate_featured_places
 from block_density import plan_blocks,fill_blocks,simple_polygons
 
 ROAD_TYPES={'primary','secondary','tertiary','residential','unclassified','living_street','primary_link','secondary_link','tertiary_link','service'}
@@ -186,12 +186,12 @@ def expand(data,ways,pts):
         shapely.prepare(p_buf)
         data[key]=[list(t.exterior.coords)[:-1] for p in parts(geometry) if p.geom_type=='Polygon' for t in triangulate(p) if geometry.covers(t.representative_point()) and p_buf.covers(t)]
     density_plan=plan_blocks(data,ways,pts,selected,area,road_polygons,hospital_campus,plaza)
-    occupied=[Polygon(b['points']).buffer(1.5) for b in buildings]
+    occupied=[Polygon(b['points']).buffer(1.5,join_style=2) for b in buildings]
     occupied.append(density_plan['reserved'])
     occupied.append(hospital_campus)
-    occupied += [Polygon(l['points']).buffer(1) for l in landmarks if l['type']=='green']
-    occupied += [line.buffer(9) for line in rail]
-    occupied += [road_polygons.buffer(3.4),plaza.buffer(1)]
+    occupied += [Polygon(l['points']).buffer(1,join_style=2) for l in landmarks if l['type']=='green']
+    occupied += [line.buffer(9,cap_style=2,join_style=2) for line in rail]
+    occupied += [road_polygons.buffer(3.4,join_style=2),plaza.buffer(1,join_style=2)]
     unavailable=unary_union(occupied)
     shapely.prepare(unavailable)
     generated=[];generated_fronts=[];gen_grid={}
@@ -266,5 +266,6 @@ def expand(data,ways,pts):
             if math.dist(a,b)<3 or distance<1:continue
             if best is None or distance<best[0]:best=(distance,a,b,(near.x-middle.x,near.y-middle.y))
         if best:building['front']={'distance':best[0],'a':best[1],'b':best[2],'towards':best[3]}
-    print('NEIGHBORHOOD',data['coverage']['block_counts'],'streets',len(streets),'buildings',len(buildings),'generic',len(data['generated_buildings']))
+    annotate_featured_places(data,ways,pts)
+    print('NEIGHBORHOOD',data['coverage']['block_counts'],'streets',len(streets),'buildings',len(buildings),'generic',len(data['generated_buildings']),'featured',len(data.get('featured_places',[])))
     return data

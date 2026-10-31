@@ -28,7 +28,13 @@ func prepare(builder: SceneTree) -> void:
 		"cafe_wood": Color("6e4a35"),
 		"cafe_cream": Color("f2e4be"),
 		"palm_leaf": Color.WHITE,
-		"palm_trunk": Color.WHITE
+		"palm_trunk": Color.WHITE,
+		"brand_dark": Color("1a1d21"),
+		"brand_gold": Color("e5b842"),
+		"brand_pink": Color("e87a90"),
+		"brand_orange": Color("e86a24"),
+		"brand_purple": Color("7a288a"),
+		"bronze_statue": Color("5c4d3c")
 	}
 	for key: String in palette:
 		b.colors[key] = palette[key]
@@ -38,6 +44,9 @@ func generate() -> void:
 	_coto()
 	_perla()
 	_estacion_sarmiento()
+	_featured_places()
+	_detailed_plazas()
+	_el_muro_de_ramos()
 
 func _frame(front: Dictionary) -> Transform3D:
 	var a: Vector3 = b._v(front["a"])
@@ -355,3 +364,350 @@ func _palm(position: Vector3) -> void:
 		var end: Vector3 = top + direction * 3.65 - Vector3.UP * (1.15 - tier * 0.5)
 		b._quad(top, mid1 - side, mid2 + side * 0.7, mid1 + side, "palm_leaf")
 		b._quad(mid1 - side * 0.8, end, mid2 + side * 0.5, mid1 + side * 0.8, "palm_leaf")
+
+func _featured_places() -> void:
+	for place: Dictionary in b.data.get("featured_places", []):
+		var front: Dictionary = place["front"]
+		var frame: Transform3D = _frame(front)
+		var width: float = clampf(float(front["width"]), 6.0, 14.0)
+		var style: String = str(place.get("style", "bistro_wood"))
+		var sign_txt: String = str(place.get("sign", place["name"]))
+		var sub_txt: String = str(place.get("sub", ""))
+		var addr_txt: String = str(place.get("address", ""))
+
+		var main_col: String = "brand_dark"
+		var accent_col: String = "brand_gold"
+		var text_col: String = "shop_white"
+		var emissive_sign: bool = true
+
+		match style:
+			"pizzeria_modern":
+				main_col = "brand_dark"
+				accent_col = "station_brick"
+				text_col = "brand_gold"
+			"gelato_red":
+				main_col = "cafe_cream"
+				accent_col = "coto_red"
+				text_col = "shop_white"
+			"bistro_wood":
+				main_col = "cafe_wood"
+				accent_col = "brand_dark"
+				text_col = "cafe_cream"
+			"gelato_luxury":
+				main_col = "brand_dark"
+				accent_col = "brand_gold"
+				text_col = "lamp_glow"
+			"burger_arcade":
+				main_col = "brand_dark"
+				accent_col = "traffic_red"
+				text_col = "coto_yellow"
+			"burger_boutique":
+				main_col = "cafe_cream"
+				accent_col = "perla_green"
+				text_col = "cafe_wood"
+			"burger_craft":
+				main_col = "brand_dark"
+				accent_col = "coto_yellow"
+				text_col = "lamp_glow"
+			"pharmacy_green":
+				main_col = "shop_white"
+				accent_col = "traffic_green"
+				text_col = "shop_white"
+			"pharmacy_blue":
+				main_col = "shop_white"
+				accent_col = "coto_blue"
+				text_col = "shop_white"
+			"gym_modern":
+				main_col = "brand_dark"
+				accent_col = "coto_yellow"
+				text_col = "coto_yellow"
+			"club_fire", "fire_station":
+				main_col = "coto_red"
+				accent_col = "shop_white"
+				text_col = "shop_white"
+			"patisserie_warm":
+				main_col = "cafe_wood"
+				accent_col = "perla_green"
+				text_col = "cafe_cream"
+			"patisserie_pink":
+				main_col = "shop_white"
+				accent_col = "brand_pink"
+				text_col = "shop_white"
+			"sushi_samurai", "sushi_otaku":
+				main_col = "brand_dark"
+				accent_col = "coto_red"
+				text_col = "lamp_glow"
+			"trattoria_italiana", "pasta_italiana":
+				main_col = "cafe_cream"
+				accent_col = "perla_green"
+				text_col = "shop_white"
+			"candy_wholesale":
+				main_col = "coto_blue"
+				accent_col = "coto_yellow"
+				text_col = "coto_red"
+			"climbing_gym":
+				main_col = "brand_dark"
+				accent_col = "brand_orange"
+				text_col = "shop_white"
+			"neoclassical_hall":
+				main_col = "trim_stone"
+				accent_col = "shop_white"
+				text_col = "bronze_statue"
+				emissive_sign = false
+			"care_center":
+				main_col = "shop_white"
+				accent_col = "train_blue"
+				text_col = "shop_white"
+			"disco_vinicius", "disco_mata":
+				main_col = "brand_dark"
+				accent_col = "brand_purple" if style == "disco_vinicius" else "coto_red"
+				text_col = "lamp_glow"
+
+		# Ground-floor architectural cladding panel & side pilasters
+		_box(frame, Vector3(0, 2.25, 0.08), Vector3(width, 4.5, 0.10), main_col)
+		_box(frame, Vector3(-width * 0.48, 2.25, 0.15), Vector3(0.38, 4.5, 0.18), accent_col)
+		_box(frame, Vector3(width * 0.48, 2.25, 0.15), Vector3(0.38, 4.5, 0.18), accent_col)
+
+		# Storefront glazing & warm interior illumination (except closed nightclubs)
+		if not style.begins_with("disco_"):
+			_box(frame, Vector3(0, 1.55, 0.14), Vector3(width - 1.1, 2.55, 0.08), "glass")
+			_box(frame, Vector3(0, 2.68, 0.12), Vector3(width - 1.4, 0.10, 0.08), "lamp_glow")
+		else:
+			# Nightclub double acoustic doors + vertical neon LED tubes
+			_box(frame, Vector3(0, 1.35, 0.16), Vector3(2.8, 2.5, 0.12), "metal")
+			for nx: float in [-width * 0.36, -width * 0.22, width * 0.22, width * 0.36]:
+				_box(frame, Vector3(nx, 2.2, 0.18), Vector3(0.12, 3.8, 0.12), "traffic_red" if style == "disco_mata" else "train_blue")
+				_box(frame, Vector3(nx + 0.18, 2.2, 0.18), Vector3(0.08, 3.4, 0.10), "lamp_glow")
+
+		# Prominent upper fascia / marquee box & 3D brand lettering
+		var fascia_col: String = accent_col if main_col == "shop_white" or main_col == "cafe_cream" else main_col
+		_box(frame, Vector3(0, 3.65, 0.22), Vector3(width + 0.2, 1.15, 0.24), fascia_col)
+		_box(frame, Vector3(0, 4.26, 0.26), Vector3(width + 0.3, 0.14, 0.30), accent_col)
+		_box(frame, Vector3(0, 3.04, 0.26), Vector3(width + 0.3, 0.10, 0.28), "lamp_glow" if emissive_sign else "trim_stone")
+
+		var sign_h: float = clampf(width * 0.068, 0.38, 0.62)
+		if sign_txt.length() > 14:
+			sign_h = clampf(width / float(sign_txt.length()) * 1.15, 0.30, 0.50)
+		_text(frame, Vector3(0, 3.78, 0.36), sign_txt, sign_h, text_col, style in ["neoclassical_hall", "trattoria_italiana", "pasta_italiana"], emissive_sign)
+		if not sub_txt.is_empty():
+			_text(frame, Vector3(0, 3.28, 0.36), sub_txt, 0.22, "cafe_cream" if fascia_col != "cafe_cream" else "brand_dark", false, false)
+
+		# Street address plaque on right pilaster
+		if not addr_txt.is_empty():
+			_box(frame, Vector3(width * 0.36, 2.88, 0.24), Vector3(2.2, 0.28, 0.06), "blue")
+			_text(frame, Vector3(width * 0.36, 2.88, 0.29), addr_txt.to_upper(), 0.13, "shop_white")
+
+		# Style-specific 3D architectural ornaments & street-side props
+		if style in ["pharmacy_green", "pharmacy_blue"]:
+			# Projecting 3D illuminated green pharmacy cross perpendicular to facade
+			var cross_c: Vector3 = Vector3(-width * 0.42, 3.45, 0.78)
+			_box(frame, cross_c, Vector3(0.14, 0.88, 0.88), "traffic_green")
+			_box(frame, cross_c, Vector3(0.18, 0.82, 0.28), "lamp_glow")
+			_box(frame, cross_c, Vector3(0.18, 0.28, 0.82), "lamp_glow")
+		elif style in ["burger_arcade", "burger_boutique", "burger_craft"]:
+			# Sculpted 3D Burger emblem above the entrance
+			var bc: Vector3 = frame * Vector3(-width * 0.35, 3.65, 0.52)
+			_cylinder(bc + Vector3.UP * 0.20, 0.38, 0.16, "brand_gold")
+			_cylinder(bc + Vector3.UP * 0.06, 0.40, 0.06, "traffic_green")
+			_cylinder(bc, 0.41, 0.10, "cafe_wood")
+			_cylinder(bc - Vector3.UP * 0.06, 0.42, 0.04, "coto_yellow")
+			_cylinder(bc - Vector3.UP * 0.15, 0.38, 0.12, "brand_gold")
+			if style == "burger_craft":
+				# Warm craft beer festoon lights under canopy
+				_box(frame, Vector3(0, 2.85, 0.65), Vector3(width - 0.4, 0.08, 1.1), "brand_dark")
+				for lx: float in [-width * 0.35, -width * 0.18, 0.0, width * 0.18, width * 0.35]:
+					_box(frame, Vector3(lx, 2.76, 0.95), Vector3(0.12, 0.12, 0.12), "lamp_glow")
+		elif style in ["gelato_red", "gelato_luxury"]:
+			# 3D sculpted Gelato Cone by the entrance
+			var gc: Vector3 = frame * Vector3(-width * 0.38, 1.15, 0.55)
+			_cylinder(gc, 0.22, 0.75, "brand_gold")
+			_cylinder(gc + Vector3.UP * 0.48, 0.28, 0.32, "flower_red" if style == "gelato_red" else "cafe_cream")
+			_cylinder(gc + Vector3.UP * 0.72, 0.22, 0.26, "cafe_cream" if style == "gelato_red" else "brand_gold")
+		elif style in ["sushi_samurai", "sushi_otaku"]:
+			# Japanese Torii red lintel & glowing hanging paper lanterns (chochin)
+			_box(frame, Vector3(0, 2.95, 0.48), Vector3(width + 0.5, 0.18, 0.36), "coto_red")
+			_box(frame, Vector3(0, 2.78, 0.42), Vector3(width + 0.1, 0.12, 0.24), "brand_dark")
+			for lx: float in [-width * 0.32, -width * 0.12, width * 0.12, width * 0.32]:
+				_cylinder(frame * Vector3(lx, 2.42, 0.52), 0.18, 0.42, "traffic_red")
+				_cylinder(frame * Vector3(lx, 2.42, 0.52), 0.14, 0.46, "lamp_glow")
+		elif style in ["trattoria_italiana", "pasta_italiana", "pizzeria_modern", "bistro_wood", "patisserie_warm", "patisserie_pink"]:
+			# Sloped canvas awning + outdoor cafe tables on sidewalk
+			var aw_col: String = accent_col
+			b._quad(
+				frame * Vector3(-width * 0.46, 3.02, 0.18),
+				frame * Vector3(width * 0.46, 3.02, 0.18),
+				frame * Vector3(width * 0.46, 2.62, 1.25),
+				frame * Vector3(-width * 0.46, 2.62, 1.25),
+				aw_col
+			)
+			if style in ["trattoria_italiana", "pasta_italiana"]:
+				# Italian tricolor ribbon on fascia
+				_box(frame, Vector3(-width * 0.3, 3.02, 0.32), Vector3(width * 0.3, 0.10, 0.08), "perla_green")
+				_box(frame, Vector3(0.0, 3.02, 0.32), Vector3(width * 0.3, 0.10, 0.08), "shop_white")
+				_box(frame, Vector3(width * 0.3, 3.02, 0.32), Vector3(width * 0.3, 0.10, 0.08), "coto_red")
+			for tx: float in [-width * 0.24, width * 0.24]:
+				var tpos: Vector3 = frame * Vector3(tx, 0.04, 1.55)
+				if b.map.get_road_distance(tpos) > 1.1:
+					_table(tpos, frame.basis, true)
+		elif style == "neoclassical_hall":
+			# Monumental neoclassical pilasters & triangular pediment for Sociedad de Socorros Mutuos
+			for cx: float in [-width * 0.42, -width * 0.16, width * 0.16, width * 0.42]:
+				_box(frame, Vector3(cx, 3.1, 0.22), Vector3(0.46, 6.0, 0.28), "shop_white")
+				_box(frame, Vector3(cx, 6.15, 0.26), Vector3(0.62, 0.24, 0.36), "trim_stone")
+			# Triangular pediment crown
+			_box(frame, Vector3(0, 6.45, 0.24), Vector3(width + 0.4, 0.35, 0.42), "trim_stone")
+			_box(frame, Vector3(0, 6.95, 0.22), Vector3(width * 0.65, 0.65, 0.34), "shop_white")
+			_box(frame, Vector3(0, 7.45, 0.22), Vector3(width * 0.32, 0.45, 0.30), "trim_stone")
+		elif style == "climbing_gym":
+			# Exterior boulder/climbing wall panel with colorful climbing holds
+			_box(frame, Vector3(0, 5.2, 0.16), Vector3(width * 0.85, 3.2, 0.14), "trim_stone")
+			var hold_cols: Array[String] = ["coto_red", "coto_yellow", "train_blue", "traffic_green", "brand_orange"]
+			for hi: int in range(18):
+				var hx: float = -width * 0.35 + float(hi % 6) * (width * 0.14)
+				var hy: float = 4.0 + float(hi / 6) * 0.95 + float(hi % 2) * 0.28
+				_box(frame, Vector3(hx, hy, 0.26), Vector3(0.22, 0.18, 0.14), hold_cols[hi % hold_cols.size()])
+		elif style == "fire_station":
+			# Fire station bay shutter + parked red Autobomba (fire truck cab)
+			_box(frame, Vector3(-width * 0.2, 1.75, 0.16), Vector3(3.4, 3.2, 0.10), "silver_metal")
+			_box(frame, Vector3(0, 6.5, 0.15), Vector3(1.2, 2.4, 1.2), "coto_red")
+			_cylinder(frame * Vector3(0, 7.9, 0.15), 0.45, 0.5, "silver_metal")
+			var truck_pos: Vector3 = frame * Vector3(-width * 0.2, 0.0, 1.25)
+			if b.map.get_road_distance(truck_pos) > 1.0:
+				_box(frame, Vector3(-width * 0.2, 1.15, 0.95), Vector3(2.3, 1.9, 1.8), "coto_red")
+				_box(frame, Vector3(-width * 0.2, 1.45, 1.86), Vector3(2.0, 0.75, 0.08), "glass")
+				_box(frame, Vector3(-width * 0.2, 0.45, 1.88), Vector3(2.35, 0.28, 0.14), "silver_metal")
+				_box(frame, Vector3(-width * 0.2 - 0.6, 2.18, 1.65), Vector3(0.32, 0.16, 0.22), "traffic_red")
+				_box(frame, Vector3(-width * 0.2 + 0.6, 2.18, 1.65), Vector3(0.32, 0.16, 0.22), "train_blue")
+
+func _detailed_plazas() -> void:
+	for plaza: Dictionary in b.data.get("detailed_plazas", []):
+		var pname: String = str(plaza["name"])
+		var c_arr: Array = plaza["center"]
+		var center: Vector3 = Vector3(float(c_arr[0]), 0.06, float(c_arr[1]))
+		var pts: Array = plaza.get("points", [])
+
+		# Ensure green base for Plazoleta Belgrano if not already in landmarks
+		if pname == "Plazoleta General Manuel Belgrano" and pts.size() >= 3:
+			b._polygon(pts, 0.06, "grass")
+
+		# Central circular/octagonal cobblestone agora + radial walkways
+		_cylinder(center + Vector3.UP * 0.04, 6.8, 0.08, "pavers")
+		_cylinder(center + Vector3.UP * 0.09, 7.0, 0.04, "curb")
+		for angle_deg: float in [0.0, 90.0, 180.0, 270.0]:
+			var dir: Vector3 = Vector3(cos(deg_to_rad(angle_deg)), 0, sin(deg_to_rad(angle_deg)))
+			var p_end: Vector3 = center + dir * 16.0
+			if b.map.get_road_distance(p_end) > 2.5:
+				b._strip(center + Vector3.UP * 0.04, p_end + Vector3.UP * 0.04, 2.4, "pavers")
+
+		# Park benches & twin-arm ornate boulevard streetlamps around the central agora
+		for i: int in range(4):
+			var ang: float = TAU * float(i) / 4.0 + PI * 0.25
+			var dir: Vector3 = Vector3(cos(ang), 0, sin(ang))
+			var bp: Vector3 = center + dir * 5.2
+			var yaw: float = atan2(-dir.x, -dir.z)
+			b._box(bp + Vector3(0, 0.48, 0), Vector3(1.8, 0.08, 0.48), "cafe_wood", yaw)
+			b._box(bp + Vector3(0, 0.76, 0) - dir * 0.20, Vector3(1.8, 0.42, 0.08), "cafe_wood", yaw)
+			var lp: Vector3 = center + dir * 6.4
+			b._box(lp + Vector3(0, 2.6, 0), Vector3(0.12, 5.2, 0.12), "metal")
+			b._box(lp + Vector3(0, 5.1, 0), Vector3(1.2, 0.09, 0.09), "metal", yaw)
+			b._box(lp + Vector3(0, 5.25, 0), Vector3(0.32, 0.32, 0.32), "lamp_glow")
+
+		# Monument & signature features per plaza
+		var m_frame: Transform3D = Transform3D(Basis.IDENTITY, center)
+		if pname == "Plaza Domingo Faustino Sarmiento":
+			# Stepped stone pedestal + bronze bust of Sarmiento + playground
+			_box(m_frame, Vector3(0, 0.45, 0), Vector3(3.2, 0.8, 3.2), "trim_stone")
+			_box(m_frame, Vector3(0, 1.55, 0), Vector3(1.4, 1.6, 1.4), "shop_white")
+			_cylinder(center + Vector3(0, 2.65, 0), 0.42, 0.65, "bronze_statue")
+			_cylinder(center + Vector3(0, 3.18, 0), 0.28, 0.45, "bronze_statue")
+			_box(m_frame, Vector3(0, 1.55, 0.74), Vector3(2.8, 0.55, 0.08), "coto_blue")
+			_text(m_frame, Vector3(0, 1.55, 0.80), "PLAZA D. F. SARMIENTO", 0.24, "shop_white", true, true)
+			_playground(center + Vector3(11.0, 0, -6.0))
+		elif pname == "Plazoleta General Manuel Belgrano":
+			# Stepped marble pedestal + equestrian/standing statue of Belgrano + tall Argentine Flagpole
+			var m_pt: Array = plaza.get("monument_point", c_arr)
+			var b_center: Vector3 = Vector3(float(m_pt[0]), 0.06, float(m_pt[1]))
+			var bf: Transform3D = Transform3D(Basis.IDENTITY, b_center)
+			_box(bf, Vector3(0, 0.55, 0), Vector3(3.8, 1.0, 3.8), "trim_stone")
+			_box(bf, Vector3(0, 1.85, 0), Vector3(1.8, 1.8, 1.8), "shop_white")
+			_box(bf, Vector3(0, 3.25, 0), Vector3(0.85, 1.2, 0.85), "bronze_statue")
+			_cylinder(b_center + Vector3(0, 4.1, 0), 0.28, 0.55, "bronze_statue")
+			# Tall 13m Flagpole with Argentine Flag (celeste, blanca y Sol de Mayo)
+			_cylinder(b_center + Vector3(2.8, 6.5, -1.5), 0.09, 13.0, "silver_metal")
+			_box(bf, Vector3(4.1, 11.8, -1.5), Vector3(2.6, 0.45, 0.06), "train_blue")
+			_box(bf, Vector3(4.1, 11.35, -1.5), Vector3(2.6, 0.45, 0.06), "shop_white")
+			_box(bf, Vector3(4.1, 10.9, -1.5), Vector3(2.6, 0.45, 0.06), "train_blue")
+			_box(bf, Vector3(4.1, 11.35, -1.5), Vector3(0.28, 0.28, 0.09), "coto_yellow")
+			_box(bf, Vector3(0, 1.75, 0.96), Vector3(3.6, 0.62, 0.08), "coto_blue")
+			_text(bf, Vector3(0, 1.75, 1.02), "MONUMENTO A GRAL. BELGRANO", 0.22, "shop_white", true, true)
+		elif pname == "Plaza Bartolomé Mitre":
+			# Central monumental fountain/obelisk + wooden cultural pergola + playground
+			_cylinder(center + Vector3(0, 0.35, 0), 3.6, 0.6, "trim_stone")
+			_cylinder(center + Vector3(0, 0.55, 0), 3.1, 0.25, "train_blue")
+			_box(m_frame, Vector3(0, 2.2, 0), Vector3(1.5, 3.2, 1.5), "shop_white")
+			_cylinder(center + Vector3(0, 4.2, 0), 0.45, 0.95, "bronze_statue")
+			_box(m_frame, Vector3(0, 1.8, 0.82), Vector3(3.2, 0.58, 0.08), "coto_blue")
+			_text(m_frame, Vector3(0, 1.8, 0.88), "PLAZA BARTOLOMÉ MITRE", 0.24, "shop_white", true, true)
+			# Wooden pergola
+			for px: float in [-4.5, -1.5, 1.5, 4.5]:
+				b._box(center + Vector3(px, 1.6, -9.5), Vector3(0.22, 3.2, 0.22), "cafe_wood")
+				b._box(center + Vector3(px, 1.6, -12.5), Vector3(0.22, 3.2, 0.22), "cafe_wood")
+			b._box(center + Vector3(0, 3.25, -11.0), Vector3(10.2, 0.18, 3.6), "cafe_wood")
+			_playground(center + Vector3(11.0, 0, 8.0))
+		elif pname == "Plaza Bomberitos":
+			# Monumento al Bombero Voluntario at (-167.5, 1386.0) + tribute bell + playground
+			var bom_center: Vector3 = Vector3(-167.5, 0.06, 1386.0)
+			if bom_center.distance_to(center) > 65.0:
+				bom_center = center
+			var bmf: Transform3D = Transform3D(Basis.IDENTITY, bom_center)
+			_box(bmf, Vector3(0, 0.55, 0), Vector3(3.6, 1.0, 2.4), "station_brick")
+			_box(bmf, Vector3(0, 1.85, 0), Vector3(2.2, 1.8, 1.2), "trim_stone")
+			_cylinder(bom_center + Vector3(0, 3.15, 0), 0.45, 0.85, "coto_red")
+			_cylinder(bom_center + Vector3(0, 3.65, 0), 0.35, 0.35, "brand_gold")
+			_box(bmf, Vector3(0, 1.65, 0.65), Vector3(3.4, 0.65, 0.08), "coto_red")
+			_text(bmf, Vector3(0, 1.78, 0.71), "PLAZA BOMBERITOS", 0.26, "shop_white", false, true)
+			_text(bmf, Vector3(0, 1.48, 0.71), "MONUMENTO AL BOMBERO VOLUNTARIO", 0.16, "coto_yellow", false, true)
+			_playground(center + Vector3(-8.0, 0, -8.0))
+
+func _playground(pos: Vector3) -> void:
+	if b.map.get_road_distance(pos) < 3.0:
+		return
+	# Colorful children's playground pad: slide tower, swing frame & seesaw
+	_cylinder(pos + Vector3.UP * 0.03, 4.2, 0.05, "earth")
+	b._box(pos + Vector3(-1.5, 1.2, 0), Vector3(1.4, 2.4, 1.4), "coto_blue")
+	b._box(pos + Vector3(-1.5, 2.55, 0), Vector3(1.7, 0.25, 1.7), "coto_red")
+	b._box(pos + Vector3(-0.2, 0.85, 0), Vector3(1.8, 0.12, 0.55), "coto_yellow", 0.3)
+	b._box(pos + Vector3(1.8, 2.1, 0), Vector3(2.6, 0.12, 0.12), "traffic_red")
+	for sx: float in [0.6, 3.0]:
+		b._box(pos + Vector3(sx, 1.05, 0), Vector3(0.10, 2.1, 0.8), "coto_blue")
+
+func _el_muro_de_ramos() -> void:
+	# Artistic street-art mural wall ("El Muro de Ramos") along the Sarmiento railway corridor
+	var sections: Array = b.data["sections"]
+	var mural_palette: Array[String] = ["train_blue", "shop_white", "coto_yellow", "coto_red", "traffic_green", "brand_orange", "brand_purple"]
+	var panel_idx: int = 0
+	for i: int in range(60, mini(170, sections.size() - 4), 4):
+		var a: Dictionary = sections[i]
+		var b_sec: Dictionary = sections[i + 4]
+		var pa: Vector3 = Vector3(float(a["x"]), 0.0, float(a["intervals"][0][0]) - 3.75)
+		var pb: Vector3 = Vector3(float(b_sec["x"]), 0.0, float(b_sec["intervals"][0][0]) - 3.75)
+		var mid: Vector3 = (pa + pb) * 0.5
+		if b.map.get_road_distance(mid) < 1.5:
+			continue
+		var dist: float = pa.distance_to(pb)
+		var yaw: float = -atan2((pb - pa).z, (pb - pa).x)
+		# Backing masonry wall + colorful mural panels + top coping & uplight
+		b._box(mid + Vector3.UP * 1.45, Vector3(dist + 0.05, 2.9, 0.28), "trim_stone", yaw)
+		b._box(mid + Vector3.UP * 2.95, Vector3(dist + 0.12, 0.14, 0.36), "shop_white", yaw)
+		var col_a: String = mural_palette[panel_idx % mural_palette.size()]
+		var col_b: String = mural_palette[(panel_idx + 2) % mural_palette.size()]
+		b._box(mid + Vector3(0, 1.45, 0.16), Vector3(dist * 0.92, 2.3, 0.04), col_a, yaw)
+		b._box(mid + Vector3(0, 1.45, 0.18), Vector3(dist * 0.45, 1.3, 0.04), col_b, yaw)
+		if panel_idx % 3 == 0:
+			b._box(mid + Vector3(0, 2.82, 0.28), Vector3(1.2, 0.06, 0.14), "lamp_glow", yaw)
+		if panel_idx == 12:
+			var m_frame: Transform3D = Transform3D(Basis(Vector3.UP, yaw), mid + Vector3(0, 1.55, 0.22))
+			_box(m_frame, Vector3(0, 0, 0), Vector3(dist * 0.9, 1.1, 0.06), "brand_dark")
+			_text(m_frame, Vector3(0, 0.15, 0.05), "EL MURO DE RAMOS MEJÍA", 0.42, "coto_yellow", false, true)
+			_text(m_frame, Vector3(0, -0.32, 0.05), "ARTE URBANO · FERROCARRIL SARMIENTO", 0.20, "shop_white", false, true)
+		panel_idx += 1
