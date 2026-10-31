@@ -1,0 +1,13 @@
+# Godot generated caches
+.godot/
+.tools/
+builds/
+*.tmp
+*.log
+__pycache__/
+*.py[cod]
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/

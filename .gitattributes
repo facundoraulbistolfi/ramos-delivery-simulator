@@ -1,0 +1,7 @@
+* text=auto
+*.gd text eol=lf
+*.godot text eol=lf
+*.tscn text eol=lf
+*.tres text eol=lf
+*.svg text eol=lf
+scenes/ramos_mejia.tscn filter=lfs diff=lfs merge=lfs -text

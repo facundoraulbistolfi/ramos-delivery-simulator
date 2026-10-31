@@ -1,0 +1,69 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://scripts/game.gd" id="1_game"]
+[ext_resource type="PackedScene" path="res://scenes/ramos_mejia.tscn" id="2_track"]
+[ext_resource type="PackedScene" path="res://scenes/bike.tscn" id="3_bike"]
+[ext_resource type="Script" path="res://scripts/chase_camera.gd" id="4_camera"]
+[ext_resource type="Script" path="res://scripts/hud.gd" id="5_hud"]
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMaterial"]
+sky_top_color = Color(0.22, 0.46, 0.72, 1)
+sky_horizon_color = Color(0.74, 0.82, 0.88, 1)
+ground_bottom_color = Color(0.34, 0.37, 0.34, 1)
+ground_horizon_color = Color(0.74, 0.82, 0.88, 1)
+sky_curve = 0.32
+sun_angle_max = 10.0
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMaterial")
+
+[sub_resource type="Environment" id="Environment"]
+background_mode = 2
+sky = SubResource("Sky")
+ambient_light_color = Color(0.76, 0.81, 0.88, 1)
+ambient_light_sky_contribution = 0.25
+ambient_light_energy = 0.56
+reflected_light_source = 2
+tonemap_mode = 0
+fog_enabled = true
+fog_light_color = Color(0.74, 0.8, 0.85, 1)
+fog_density = 0.001
+
+[sub_resource type="CameraAttributesPractical" id="CameraAttributes"]
+auto_exposure_enabled = false
+
+[node name="Dustline" type="Node3D"]
+script = ExtResource("1_game")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-35, -36, 0)
+light_color = Color(1, 0.96, 0.9, 1)
+light_energy = 0.82
+shadow_enabled = true
+shadow_bias = 0.03
+shadow_normal_bias = 1.2
+directional_shadow_max_distance = 210.0
+
+[node name="Track" parent="." instance=ExtResource("2_track")]
+process_mode = 1
+
+[node name="Moto" parent="." instance=ExtResource("3_bike")]
+process_mode = 1
+position = Vector3(-9, 0.05, -0.15)
+rotation = Vector3(0, 1.55, 0)
+
+[node name="ChaseCamera" type="Camera3D" parent="."]
+process_mode = 1
+position = Vector3(-1.6, 3.75, 0)
+current = true
+fov = 72.0
+far = 650.0
+attributes = SubResource("CameraAttributes")
+script = ExtResource("4_camera")
+target_path = NodePath("../Moto")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("5_hud")

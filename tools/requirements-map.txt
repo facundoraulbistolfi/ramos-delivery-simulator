@@ -1,0 +1,2 @@
+# Only needed to rebuild geographic data; Godot runs without Python or these packages.
+shapely==2.0.7
