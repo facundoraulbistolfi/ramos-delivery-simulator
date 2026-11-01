@@ -47,6 +47,11 @@ Estado general: **Completado y Estable**. Suite de pruebas: **0 fallos**.
   - *Referencia:* [ADR-0006: Selección Inicial de Modo y Multas por Choque](adr/0006-seleccion-modo-juego-y-penalizacion-choques.md).
 - [x] **Arquitectura "Agent-First" y Documentación Formal:**
   - Creación de `AGENTS.md`, `docs/adr/` (ADR-0001 a 0006 + plantilla), regla `.gemini/rules/agent_rules.md` y este roadmap.
+- [x] **Sistema de Versionado y Generador de Builds (`alpha-0.0.1`):**
+  - Script automatizado `tools/build_release.ps1` con Test Gate, compilación de PCK y generación de ZIP autónomo.
+  - Preset de exportación `export_presets.cfg` y workflow `.github/workflows/release.yml`.
+  - Primera versión distribuible `alpha-0.0.1` generada en `builds/`.
+  - *Referencia:* [ADR-0007: Sistema de Versionado Semántico y Pipeline de Builds](adr/0007-sistema-de-versionado-y-builds.md).
 
 ---
 

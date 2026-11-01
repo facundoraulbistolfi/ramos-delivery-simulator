@@ -1,0 +1,52 @@
+name: Build & Publish Release
+
+on:
+  push:
+    tags:
+      - 'alpha-*'
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      - name: Download Godot Engine
+        run: |
+          wget https://github.com/godotengine/godot-builds/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip
+          unzip Godot_v4.3-stable_linux.x86_64.zip
+          mv Godot_v4.3-stable_linux.x86_64 godot
+          chmod +x godot
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Ramos Delivery Simulator ${{ github.ref_name }}"
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: true
+          generate_release_notes: true
+          body: |
+            ## 🛵 Ramos Delivery Simulator · Versión `${{ github.ref_name }}`
+            
+            Simulador de manejo en moto 3D en mundo abierto y misiones de delivery nocturno por **Ramos Mejía, Buenos Aires, Argentina**.
+            
+            ### 🎮 Novedades de esta versión:
+            - **Mapa completo a escala 1:1:** 8,11 km², 577 manzanas urbanas reales y puentes sobre el FF.CC. Sarmiento.
+            - **Modo Delivery nocturno (10 minutos):** Retiro de pedidos en más de 30 locales emblemáticos y entregas a domicilio con propinas variables según tiempo PAR.
+            - **Modo Libre / Debug:** Exploración abierta sin límite de tiempo, plano de calles orientado al Norte (`[M]`) y selector de teletransporte (`[TAB]`).
+            - **Sistema de tráfico & multas por choque:** Autos circulando con luces de giro ámbar 45 m antes de doblar y autos estacionados a los cordones. Chocar autos descuenta plata de la billetera según la velocidad del impacto.
+            
+            ### 🚀 Instrucciones para jugar (Windows):
+            1. Descargá el archivo `.zip` adjunto.
+            2. Descomprimilo en cualquier carpeta.
+            3. Hacé doble clic en `RamosDeliverySimulator.exe` o `Jugar Ramos Delivery.bat` para comenzar a rodar.

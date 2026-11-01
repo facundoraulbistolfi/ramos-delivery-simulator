@@ -18,6 +18,7 @@ const MUTED: Color = Color("a7b6bc")
 const ORANGE: Color = Color("ff9854")
 const CYAN: Color = Color("68d1d2")
 const GREEN: Color = Color("28e070")
+const GAME_VERSION: String = "alpha-0.0.1"
 
 var _order_panel: PanelContainer
 var _speed_label: Label
@@ -109,6 +110,21 @@ func _ready() -> void:
 	credit.add_theme_font_size_override("font_size", 11)
 	credit.add_theme_color_override("font_color", Color(PAPER.r, PAPER.g, PAPER.b, 0.65))
 	screen.add_child(credit)
+
+	var ver_lbl: Label = Label.new()
+	ver_lbl.text = "Ramos Delivery Simulator · %s" % GAME_VERSION
+	ver_lbl.anchor_left = 1.0
+	ver_lbl.anchor_right = 1.0
+	ver_lbl.anchor_top = 1.0
+	ver_lbl.anchor_bottom = 1.0
+	ver_lbl.offset_left = -320.0
+	ver_lbl.offset_top = -26.0
+	ver_lbl.offset_right = -24.0
+	ver_lbl.offset_bottom = -6.0
+	ver_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	ver_lbl.add_theme_font_size_override("font_size", 11)
+	ver_lbl.add_theme_color_override("font_color", Color(PAPER.r, PAPER.g, PAPER.b, 0.45))
+	screen.add_child(ver_lbl)
 
 	update_route(0.0, 1.0, 0.0, 1647.63, 0.0, "Larrea")
 	show_message("SALÍ A RODAR", 3.5)
