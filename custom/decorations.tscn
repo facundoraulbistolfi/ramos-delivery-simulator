@@ -1,0 +1,12 @@
+[gd_scene load_steps=3 format=3 uid="uid://bdeco771custom"]
+
+[ext_resource type="PackedScene" path="res://custom/props/estatua_belgrano.tscn" id="1_belgrano"]
+[ext_resource type="Script" path="res://scripts/editor_reference_only.gd" id="2_ref_script"]
+
+[node name="CustomDecorations" type="Node3D"]
+
+[node name="ReferenceMap_SoloEditor" type="Node3D" parent="."]
+script = ExtResource("2_ref_script")
+
+[node name="EstatuaManuelBelgrano" parent="." instance=ExtResource("1_belgrano")]
+transform = Transform3D(0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, 0.707107, -1191.4, 0.16, 334.1)

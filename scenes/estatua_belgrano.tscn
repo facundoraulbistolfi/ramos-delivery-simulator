@@ -1,0 +1,111 @@
+[gd_scene format=3 uid="uid://x8gsmxgrf7qs"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_StoneBase"]
+resource_name = "Mat_StoneBase"
+albedo_color = Color(0.82, 0.80, 0.76, 1)
+roughness = 0.75
+
+[sub_resource type="BoxMesh" id="Mesh_Step1"]
+material = SubResource("Mat_StoneBase")
+size = Vector3(3.4, 0.25, 3.4)
+
+[sub_resource type="BoxMesh" id="Mesh_Step2"]
+material = SubResource("Mat_StoneBase")
+size = Vector3(2.6, 0.25, 2.6)
+
+[sub_resource type="StandardMaterial3D" id="Mat_Pedestal"]
+resource_name = "Mat_Pedestal"
+albedo_color = Color(0.75, 0.73, 0.70, 1)
+roughness = 0.65
+
+[sub_resource type="BoxMesh" id="Mesh_Pedestal"]
+material = SubResource("Mat_Pedestal")
+size = Vector3(1.4, 2.1, 1.4)
+
+[sub_resource type="BoxMesh" id="Mesh_Cornice"]
+material = SubResource("Mat_Pedestal")
+size = Vector3(1.6, 0.22, 1.6)
+
+[sub_resource type="StandardMaterial3D" id="Mat_Bronze"]
+resource_name = "Mat_Bronze"
+albedo_color = Color(0.38, 0.34, 0.26, 1)
+metallic = 0.85
+metallic_specular = 0.6
+roughness = 0.32
+
+[sub_resource type="BoxMesh" id="Mesh_Plaque"]
+material = SubResource("Mat_Bronze")
+size = Vector3(0.85, 0.55, 0.08)
+
+[sub_resource type="BoxMesh" id="Mesh_BustBase"]
+material = SubResource("Mat_Bronze")
+size = Vector3(0.75, 0.25, 0.65)
+
+[sub_resource type="BoxMesh" id="Mesh_Torso"]
+material = SubResource("Mat_Bronze")
+size = Vector3(0.95, 0.85, 0.60)
+
+[sub_resource type="SphereMesh" id="Mesh_Head"]
+material = SubResource("Mat_Bronze")
+radius = 0.24
+height = 0.52
+
+[sub_resource type="BoxShape3D" id="Collision_Base"]
+size = Vector3(3.4, 0.6, 3.4)
+
+[sub_resource type="BoxShape3D" id="Collision_Pedestal"]
+size = Vector3(1.6, 3.2, 1.6)
+
+[node name="EstatuaBelgrano" type="Node3D"]
+
+[node name="BaseEscalon1" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.125, 0)
+mesh = SubResource("Mesh_Step1")
+
+[node name="BaseEscalon2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.375, 0)
+mesh = SubResource("Mesh_Step2")
+
+[node name="Pedestal" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.55, 0)
+mesh = SubResource("Mesh_Pedestal")
+
+[node name="Cornisa" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.65, 0)
+mesh = SubResource("Mesh_Cornice")
+
+[node name="PlacaBronce" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0.72)
+mesh = SubResource("Mesh_Plaque")
+
+[node name="TextoPlaca" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0.77)
+text = "GENERAL
+MANUEL BELGRANO
+1770 - 1820"
+font_size = 32
+pixel_size = 0.004
+outline_size = 4
+modulate = Color(0.92, 0.88, 0.72, 1)
+
+[node name="BustoBase" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.85, 0)
+mesh = SubResource("Mesh_BustBase")
+
+[node name="Torso" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.32, 0)
+mesh = SubResource("Mesh_Torso")
+
+[node name="Cabeza" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.88, 0.02)
+mesh = SubResource("Mesh_Head")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+
+[node name="CollisionBase" type="CollisionShape3D" parent="StaticBody3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
+shape = SubResource("Collision_Base")
+
+[node name="CollisionPedestal" type="CollisionShape3D" parent="StaticBody3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1, 0)
+shape = SubResource("Collision_Pedestal")

@@ -58,6 +58,7 @@ def plan_blocks(data,ways,pts,selected,area,road_polygons,hospital_campus,plaza)
         if tags.get('access') in ['no','private']:private_gardens.append(polygon)
     railway=unary_union([LineString(r['points']).buffer(16,cap_style=2,join_style=2) for r in data['railways']])
     platforms=[Polygon(p['points']).buffer(4,join_style=2) for p in data['landmarks'] if p['type']=='platform']
+    bridge_res=[LineString([(pt[0],pt[2]) for pt in br['points_3d']]).buffer(br['width']*0.5+2.8,cap_style=2,join_style=2) for br in data.get('bridges',[])+data.get('footbridges',[])]
     # Shopfront sidewalks and hospital access must not become thin new buildings.
     forecourts=[]
     for site in data['recognizable_buildings']:
@@ -66,7 +67,7 @@ def plan_blocks(data,ways,pts,selected,area,road_polygons,hospital_campus,plaza)
         for front in fronts:
             a,c=front['a'],front['b'];nx,nz=front['normal']
             forecourts.append(Polygon([a,c,(c[0]+nx*12.5,c[1]+nz*12.5),(a[0]+nx*12.5,a[1]+nz*12.5)]))
-    public_open=unary_union(greens+[p['area'] for p in passages]+[railway,plaza.buffer(.5,join_style=2)]+platforms+forecourts)
+    public_open=unary_union(greens+[p['area'] for p in passages]+[railway,plaza.buffer(.5,join_style=2)]+platforms+forecourts+bridge_res)
     reserved=unary_union([public_open,hospital_campus])
     # Street-edge faces are clipped back to the real road widths and sidewalks.
     interiors=unary_union(selected).intersection(area).difference(road_polygons.buffer(3.5,join_style=2))
@@ -89,7 +90,8 @@ def plan_blocks(data,ways,pts,selected,area,road_polygons,hospital_campus,plaza)
     return {'reserved':reserved,'private':private}
 
 def fill_blocks(data,plan):
-    current=[Polygon(b['points']) for b in data['buildings']+data['generated_buildings']]
+    current=[Polygon(b['points']).buffer(0) for b in data['buildings']+data['generated_buildings']]
+    current=[p for p in current if not p.is_empty and p.is_valid]
     occupied=unary_union(current)
     # A few centimetres of separation avoid coplanar faces, while remaining far below bike clearance.
     remaining=plan['private'].difference(occupied.buffer(.025,join_style=2))
@@ -102,10 +104,12 @@ def fill_blocks(data,plan):
             cell=box(ix*85,iz*85,(ix+1)*85,(iz+1)*85)
             if not remaining.intersects(cell):continue
             for polygon in simple_polygons(remaining.intersection(cell)):
-                # Edge slivers become low solid party walls rather than implausible narrow houses.
-                height=1.8 if polygon.area<3 else 3.2*(1+(ix*7+iz*11)%3)
+                # Thin edge slivers or narrow boundary strips become low solid party walls, not tall buildings.
+                is_sliver = polygon.area < 25.0 or polygon.buffer(-1.2).is_empty
+                height = 1.8 if is_sliver else 3.2 * (1 + (ix * 7 + iz * 11) % 3)
+                b_type = 'generic_party_wall' if is_sliver else 'generic_block_infill'
                 add_polys.append(polygon)
-                additions.append({'osm_id':0,'generated_id':start_id+len(additions),'points':list(polygon.exterior.coords)[:-1],'height':height,'height_source':'generic block infill','name':'','type':'generic_block_infill'})
+                additions.append({'osm_id':0,'generated_id':start_id+len(additions),'points':list(polygon.exterior.coords)[:-1],'height':height,'height_source':'generic block infill','name':'','type':b_type})
     data['generated_buildings'].extend(additions)
     solid=unary_union(current+add_polys)
     # Configuration space for a bike slightly narrower than the actual 0.84 m capsule.

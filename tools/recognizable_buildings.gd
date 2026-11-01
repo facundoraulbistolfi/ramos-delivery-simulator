@@ -61,6 +61,9 @@ func _text(frame: Transform3D, position: Vector3, caption: String, height: float
 	var instance: MeshInstance3D = MeshInstance3D.new()
 	instance.name = "Sign_" + caption.validate_node_name()
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	instance.visibility_range_end = 165.0
+	instance.visibility_range_end_margin = 15.0
+	instance.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 	var mesh: TextMesh = TextMesh.new()
 	mesh.text = caption
 	mesh.font_size = 100
@@ -462,6 +465,79 @@ func _featured_places() -> void:
 				main_col = "brand_dark"
 				accent_col = "brand_purple" if style == "disco_vinicius" else "coto_red"
 				text_col = "lamp_glow"
+			"electronics_store":
+				main_col = "shop_white"
+				accent_col = "brand_purple"
+				text_col = "shop_white"
+			"shopping_gallery":
+				main_col = "brand_dark"
+				accent_col = "brand_gold"
+				text_col = "cafe_cream"
+			"fast_food_green":
+				main_col = "traffic_green"
+				accent_col = "coto_yellow"
+				text_col = "coto_yellow"
+			"sports_store":
+				main_col = "coto_blue"
+				accent_col = "brand_orange"
+				text_col = "shop_white"
+			"cafe_bonafide":
+				main_col = "coto_red"
+				accent_col = "cafe_wood"
+				text_col = "shop_white"
+			"neoclassical_clinic":
+				main_col = "trim_stone"
+				accent_col = "hospital_blue"
+				text_col = "shop_white"
+			"burger_mostaza":
+				main_col = "coto_red"
+				accent_col = "coto_yellow"
+				text_col = "coto_yellow"
+			"burger_wendys":
+				main_col = "shop_white"
+				accent_col = "coto_red"
+				text_col = "shop_white"
+			"bank_bbva":
+				main_col = "coto_blue"
+				accent_col = "train_blue"
+				text_col = "shop_white"
+			"bank_galicia":
+				main_col = "shop_white"
+				accent_col = "brand_orange"
+				text_col = "shop_white"
+			"bank_icbc", "bank_patagonia":
+				main_col = "shop_white"
+				accent_col = "coto_red" if style == "bank_icbc" else "coto_blue"
+				text_col = "shop_white"
+			"bank_hipotecario":
+				main_col = "shop_white"
+				accent_col = "brand_orange"
+				text_col = "shop_white"
+			"historic_school":
+				main_col = "trim_stone"
+				accent_col = "coto_blue"
+				text_col = "shop_white"
+				emissive_sign = false
+			"bistro_milanesa":
+				main_col = "brand_dark"
+				accent_col = "brand_gold"
+				text_col = "coto_yellow"
+			"toy_store":
+				main_col = "coto_yellow"
+				accent_col = "coto_red"
+				text_col = "shop_white"
+			"cafe_starbucks":
+				main_col = "cafe_wood"
+				accent_col = "perla_green"
+				text_col = "shop_white"
+			"bodegon_farola":
+				main_col = "cafe_cream"
+				accent_col = "coto_red"
+				text_col = "shop_white"
+			"police_station":
+				main_col = "shop_white"
+				accent_col = "coto_blue"
+				text_col = "shop_white"
 
 		# Ground-floor architectural cladding panel & side pilasters
 		_box(frame, Vector3(0, 2.25, 0.08), Vector3(width, 4.5, 0.10), main_col)
@@ -504,7 +580,7 @@ func _featured_places() -> void:
 			_box(frame, cross_c, Vector3(0.14, 0.88, 0.88), "traffic_green")
 			_box(frame, cross_c, Vector3(0.18, 0.82, 0.28), "lamp_glow")
 			_box(frame, cross_c, Vector3(0.18, 0.28, 0.82), "lamp_glow")
-		elif style in ["burger_arcade", "burger_boutique", "burger_craft"]:
+		elif style in ["burger_arcade", "burger_boutique", "burger_craft", "burger_mostaza", "burger_wendys"]:
 			# Sculpted 3D Burger emblem above the entrance
 			var bc: Vector3 = frame * Vector3(-width * 0.35, 3.65, 0.52)
 			_cylinder(bc + Vector3.UP * 0.20, 0.38, 0.16, "brand_gold")
@@ -530,7 +606,7 @@ func _featured_places() -> void:
 			for lx: float in [-width * 0.32, -width * 0.12, width * 0.12, width * 0.32]:
 				_cylinder(frame * Vector3(lx, 2.42, 0.52), 0.18, 0.42, "traffic_red")
 				_cylinder(frame * Vector3(lx, 2.42, 0.52), 0.14, 0.46, "lamp_glow")
-		elif style in ["trattoria_italiana", "pasta_italiana", "pizzeria_modern", "bistro_wood", "patisserie_warm", "patisserie_pink"]:
+		elif style in ["trattoria_italiana", "pasta_italiana", "pizzeria_modern", "bistro_wood", "patisserie_warm", "patisserie_pink", "cafe_bonafide", "cafe_starbucks", "bodegon_farola", "bistro_milanesa"]:
 			# Sloped canvas awning + outdoor cafe tables on sidewalk
 			var aw_col: String = accent_col
 			b._quad(
@@ -549,8 +625,8 @@ func _featured_places() -> void:
 				var tpos: Vector3 = frame * Vector3(tx, 0.04, 1.55)
 				if b.map.get_road_distance(tpos) > 1.1:
 					_table(tpos, frame.basis, true)
-		elif style == "neoclassical_hall":
-			# Monumental neoclassical pilasters & triangular pediment for Sociedad de Socorros Mutuos
+		elif style in ["neoclassical_hall", "neoclassical_clinic", "historic_school"]:
+			# Monumental neoclassical pilasters & triangular pediment
 			for cx: float in [-width * 0.42, -width * 0.16, width * 0.16, width * 0.42]:
 				_box(frame, Vector3(cx, 3.1, 0.22), Vector3(0.46, 6.0, 0.28), "shop_white")
 				_box(frame, Vector3(cx, 6.15, 0.26), Vector3(0.62, 0.24, 0.36), "trim_stone")
@@ -558,6 +634,17 @@ func _featured_places() -> void:
 			_box(frame, Vector3(0, 6.45, 0.24), Vector3(width + 0.4, 0.35, 0.42), "trim_stone")
 			_box(frame, Vector3(0, 6.95, 0.22), Vector3(width * 0.65, 0.65, 0.34), "shop_white")
 			_box(frame, Vector3(0, 7.45, 0.22), Vector3(width * 0.32, 0.45, 0.30), "trim_stone")
+		elif style.begins_with("bank_"):
+			# Bank security glass portal, metallic columns & 24hs ATM bay
+			for cx: float in [-width * 0.28, width * 0.28]:
+				_box(frame, Vector3(cx, 2.25, 0.22), Vector3(0.32, 4.4, 0.24), "silver_metal")
+			_box(frame, Vector3(-width * 0.38, 2.15, 0.24), Vector3(1.1, 0.42, 0.08), accent_col)
+			_text(frame, Vector3(-width * 0.38, 2.15, 0.30), "24HS", 0.20, "shop_white", false, true)
+		elif style == "police_station":
+			# Police blue beacon lamps & institutional shield panel
+			_box(frame, Vector3(-width * 0.35, 3.05, 0.35), Vector3(0.28, 0.28, 0.28), "train_blue")
+			_box(frame, Vector3(width * 0.35, 3.05, 0.35), Vector3(0.28, 0.28, 0.28), "train_blue")
+			_box(frame, Vector3(0, 5.1, 0.20), Vector3(1.4, 1.5, 0.14), "coto_blue")
 		elif style == "climbing_gym":
 			# Exterior boulder/climbing wall panel with colorful climbing holds
 			_box(frame, Vector3(0, 5.2, 0.16), Vector3(width * 0.85, 3.2, 0.14), "trim_stone")
@@ -586,9 +673,15 @@ func _detailed_plazas() -> void:
 		var center: Vector3 = Vector3(float(c_arr[0]), 0.06, float(c_arr[1]))
 		var pts: Array = plaza.get("points", [])
 
-		# Ensure green base for Plazoleta Belgrano if not already in landmarks
+		# Ensure green base for Plazoleta Belgrano only if vertices do not intrude into roadway
 		if pname == "Plazoleta General Manuel Belgrano" and pts.size() >= 3:
-			b._polygon(pts, 0.06, "grass")
+			var pts_ok: bool = true
+			for pt in pts:
+				if b.map.get_road_distance(b._v(pt)) < 0.2:
+					pts_ok = false
+					break
+			if pts_ok:
+				b._polygon(pts, 0.06, "grass")
 
 		# Central circular/octagonal cobblestone agora + radial walkways
 		_cylinder(center + Vector3.UP * 0.04, 6.8, 0.08, "pavers")

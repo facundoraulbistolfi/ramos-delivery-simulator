@@ -33,8 +33,10 @@ La copia del motor en `.tools/` queda fuera de Git. No hay dependencias, plugins
 | 1 | Visitar Casa Hospital San Juan de Dios |
 | 2 | Visitar Coto de Rivadavia y Pueyrredón |
 | 3 | Visitar La Perla de Rivadavia y Avenida de Mayo |
-| M | Cambiar / pedir nuevo pedido de reparto («Ir a ojo») |
-| Esc | Pausar / continuar |
+| M | Abrir / cerrar el **Plano de Calles** a pantalla completa (orientado al Norte; detiene el manejo mientras se consulta) |
+| Tab | Abrir / cerrar el **Selector de Teletransporte** (puentes, plazas, avenidas, comercios e instituciones) |
+| N | Cambiar / pedir nuevo pedido de reparto («Ir a ojo») |
+| Esc | Cerrar mapa/selector o pausar / continuar |
 
 ## Incluye
 
@@ -45,7 +47,14 @@ La copia del motor en `.tools/` queda fuera de Git. No hay dependencias, plugins
 - Red vial extendida a toda la localidad de **Ramos Mejía**: **568 tramos de calles**, **577 manzanas urbanas completas** (**8,11 km²**), vías y andenes del FF.CC. Sarmiento y espacios verdes.
 - **636 edificios con huellas de OSM** y **23.809 volúmenes genéricos** de frentes e interiores de manzana, con **166 pasajes públicos** preservados. Los volúmenes cierran los huecos privados y tienen colisión; no representan edificios individualmente relevados.
 - Tres edificios emblemáticos a gran escala: San Juan de Dios (conjunto blanco, bandas de ventanas, guardia, palmeras y jardines), Coto (cartelería roja, vidrieras, entrada y frente lateral sobre Pueyrredón) y La Perla (ochava vidriada, toldos verdes, letras y mesas exteriores).
-- **27 locales, clubes e instituciones detalladas en 3D** con fachadas propias, marquesinas, neones, toldos, mesas en vereda y cartelera: **Apolonia**, **Faricci** (2 sucursales), **Due**, **Lucciano's**, **Banned Burger**, **Clöe Burger**, **La Birra Bar**, **Farmacia Moreno**, **Farmacia Central Oeste** (2 sucursales), **SportClub Ramos Mejía**, **Club Bomberitos**, **Cuartel Central de Bomberos Voluntarios**, **La Casa de Oberón**, **Antojos**, **Samurai Sushi**, **Otaku Sushi**, **La Tanita** (2 sucursales), **La Buena Fama**, **Gallegol**, **El Muro Escalada**, **Sociedad de Socorros Mutuos**, **Centro de Día CAVIDI**, **Vinicius** y **Mata Club**.
+- **51 locales, bancos, galerías, escuelas, clubes e instituciones detalladas en 3D** con fachadas propias, marquesinas, neones, toldos, mesas en vereda y cartelera, incluyendo el corredor céntrico de **Av. de Mayo (de Rivadavia a Chacabuco)** y **Av. Rivadavia (de Pueyrredón a Av. de Mayo)** con frentes comerciales continuos, balcones, galerías y marquesinas.
+- **Puentes vehiculares y peatonales sobre el FF.CC. Sarmiento**:
+  - **Puente Díaz Vélez - República** (cruce elevado sobre las vías entre Av. Rivadavia / Díaz Vélez y Gral. Pinto / República).
+  - **Puentes en U Papa Francisco** sobre Av. Rivadavia entre **Necochea y Alvear** (mano Este hacia Ardoino y mano Oeste hacia Rivadavia).
+  - **Puente Peatonal Pepino Tuccio** que cruza las vías desde **Rivadavia y Moreno** hacia **French y Ardoino**.
+- **Detalle y cerramiento real de la traza ferroviaria**: muros perimetrales, rejas, laberintos peatonales, barreras y cabinas de guardabarreras que hacen físicamente posible cruzar las vías **únicamente** por los pasos a nivel habilitados (Colombres, Carlos Calvo, Monteagudo, Pastor Obligado y Medrano), los cruces peatonales y los puentes.
+- **Plano de calles con `M` y Selector de Teletransporte con `TAB`**: el plano de calles cubre toda la pantalla (impidiendo manejar mientras se mira), está orientado al **Norte**, muestra únicamente la ubicación del jugador y los nombres de todas las calles, y extiende la cartografía hacia las localidades vecinas dejando griseado el sector fuera del límite oficial de Ramos Mejía.
+- **Optimización gráfica para PCs modestas**: particionamiento espacial en sectores (`SectorChunks`) para frustum y distance culling, indexación de vértices (`SurfaceTool.index()`), árboles low-poly y sombras direccionales optimizadas (reduciendo el peso de `scenes/ramos_mejia.tscn` en un 75%).
 - **4 plazas detalladas** con monumentos, pérgolas, mástiles y juegos infantiles: **Plaza Domingo Faustino Sarmiento**, **Plazoleta Gral. Manuel Belgrano** (con monumento ecuestre y mástil), **Plaza Bartolomé Mitre** y **Plaza Bomberitos** (con monumento al Bombero Voluntario), además de **El Muro de Ramos** (galería de murales urbanos sobre el muro ferroviario de Leandro N. Alem / Gral. Soler).
 - **Sistema de misiones de reparto «Ir a ojo»**: sin GPS ni flechas guía; el jugador consulta la dirección y entrecalles del local en el HUD para retirar el pedido y luego busca la dirección de entrega en Ramos Mejía guiándose por los carteles nomencladores de las esquinas y el indicador de calle actual.
 - Veredas, señalización, pasos peatonales, locales genéricos, árboles, luminarias y refugios de colectivos.
@@ -102,3 +111,12 @@ python tools/test_density.py
 ```
 
 Es un punto de partida de conducción arcade: la moto usa `CharacterBody3D` y una inclinación visual, sin simulación física de equilibrio o suspensión.
+
+---
+
+## 🤖 Arquitectura Agent-First y Decisiones de Diseño
+
+Este repositorio opera bajo una metodología **Agent-First** para el desarrollo asistido por IA:
+- **Directivas para Agentes:** Consultá [`AGENTS.md`](file:///c:/Users/facun/game_maps/AGENTS.md) para el mapa de dominios ("qué tocar según qué cambiar"), protocolo de checklist obligatorio y guardarraíles técnicos.
+- **Registro de Decisiones (ADR):** Cada decisión estructural se documenta formalmente en [`docs/adr/`](file:///c:/Users/facun/game_maps/docs/adr) (ADR-0001 a 0006 y plantilla).
+- **Roadmap y Backlog:** El seguimiento vivo de hitos y tareas se encuentra en [`docs/roadmap.md`](file:///c:/Users/facun/game_maps/docs/roadmap.md).

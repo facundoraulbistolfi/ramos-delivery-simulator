@@ -1,11 +1,21 @@
 extends Node3D
-## Free ride around the neighborhood. R returns to Larrea; 1/2/3 visit landmarks.
+## Free ride around the neighborhood. M toggles street map; TAB opens teleport selector; N requests a new delivery order.
 const MissionSystem = preload("res://scripts/mission_system.gd")
+const TrafficManager = preload("res://scripts/traffic_manager.gd")
+
+enum GameMode {
+	NONE = 0,
+	DELIVERY = 1,
+	FREE_ROAM = 2,
+}
+
+var current_game_mode: int = GameMode.DELIVERY
 var elapsed: float = 0.0
 var _started: bool = false
 var _paused: bool = false
 var _end_message_shown: bool = false
 var mission_system: Node3D
+var traffic_manager: Node3D
 @onready var track: MotoTrack = $Track
 @onready var bike: MotoBike = $Moto
 @onready var hud: MotoHUD = $HUD
@@ -14,15 +24,38 @@ var mission_system: Node3D
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_setup_inputs()
+	hud.setup_map_data(track)
+	hud.overlay_state_changed.connect(_on_hud_overlay_state_changed)
+	hud.teleport_requested.connect(_on_teleport_requested)
 	_reset_session()
 	mission_system = MissionSystem.new()
 	mission_system.name = "MissionSystem"
 	add_child(mission_system)
 	mission_system.mission_updated.connect(hud.update_mission)
 	mission_system.mission_notification.connect(hud.show_message)
+	mission_system.start_location_dialog_requested.connect(hud.show_start_location_dialog)
+	mission_system.order_selection_dialog_requested.connect(hud.show_order_selection_dialog)
+	mission_system.shift_completed_summary.connect(hud.show_shift_summary)
+	hud.start_location_chosen.connect(_on_start_location_chosen)
+	hud.order_offer_chosen.connect(mission_system.select_order_offer)
+	hud.shift_restart_requested.connect(_restart_night_shift)
 	mission_system.setup(track, bike)
+	traffic_manager = TrafficManager.new()
+	traffic_manager.name = "TrafficManager"
+	add_child(traffic_manager)
+	traffic_manager.setup(track, bike)
 	hud.resume_requested.connect(func() -> void: _set_paused(false))
 	hud.restart_requested.connect(_restart_from_pause)
+	hud.game_mode_chosen.connect(_on_game_mode_chosen)
+	hud.switch_mode_requested.connect(_on_switch_mode_requested)
+	bike.vehicle_crashed.connect(_on_bike_vehicle_crashed)
+
+	var is_headless: bool = DisplayServer.get_name() == "headless"
+	if is_headless:
+		current_game_mode = GameMode.DELIVERY
+		hud.set_delivery_mode_active(true)
+	else:
+		hud.show_mode_selection_dialog()
 
 func _physics_process(delta: float) -> void:
 	if _paused: return
@@ -34,12 +67,26 @@ func _physics_process(delta: float) -> void:
 		_end_message_shown=true
 		hud.show_message("NECOCHEA\nPodés seguir explorando el barrio",4.0)
 	if bike.global_position.y < -10.0: _reset_session()
+	hud.update_player_transform(bike.global_position, -bike.global_transform.basis.z)
 	hud.update_route(bike.get_speed_kmh(),bike.boost,station,track.get_track_length(),elapsed,track.get_crossing_name(bike.global_position))
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("pause"):
-		_set_paused(not _paused)
+		if hud.is_map_open():
+			hud.set_map_open(false)
+		elif hud.is_teleport_open():
+			hud.set_teleport_open(false)
+		else:
+			_set_paused(not _paused)
 		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("toggle_map") and not _paused:
+		hud.toggle_map()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("teleport_menu") and not _paused:
+		hud.toggle_teleport_menu()
+		get_viewport().set_input_as_handled()
+	elif hud.is_blocking_gameplay():
+		return
 	elif event.is_action_pressed("reset") and not _paused:
 		_reset_session()
 	elif event.is_action_pressed("camera") and not _paused:
@@ -55,7 +102,53 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("visit_perla") and not _paused:
 		_visit_building("la_perla")
 	elif event.is_action_pressed("new_mission") and not _paused and mission_system != null:
-		mission_system.start_new_mission(true)
+		if current_game_mode == GameMode.DELIVERY:
+			mission_system.start_new_mission(true)
+		else:
+			hud.show_message("MODO LIBRE ACTIVO\nCambiá a Modo Delivery desde la pausa [ESC] para aceptar pedidos.", 3.5)
+
+func _on_game_mode_chosen(mode: int) -> void:
+	current_game_mode = mode
+	if mode == GameMode.DELIVERY:
+		hud.set_delivery_mode_active(true)
+		if mission_system != null:
+			mission_system.start_delivery_mode()
+	else:
+		hud.set_delivery_mode_active(false)
+		if mission_system != null:
+			mission_system.set_free_roam_mode()
+		hud.show_message("MODO LIBRE / DEBUG ACTIVADO\nExplorá Ramos Mejía sin límites · [TAB] Teletransporte · [M] Mapa", 4.5)
+
+func _on_switch_mode_requested() -> void:
+	_set_paused(false)
+	hud.show_mode_selection_dialog()
+
+func _on_bike_vehicle_crashed(impact_kmh: float, _collider: Object) -> void:
+	if current_game_mode == GameMode.DELIVERY and mission_system != null:
+		mission_system.apply_crash_penalty(impact_kmh)
+
+func _on_hud_overlay_state_changed(is_blocking_drive: bool) -> void:
+	if is_instance_valid(bike):
+		bike.controls_enabled = not is_blocking_drive
+
+func _on_teleport_requested(target_transform: Transform3D, title: String, subtitle: String) -> void:
+	bike.respawn(target_transform)
+	camera.snap_to_target()
+	hud.update_player_transform(bike.global_position, -bike.global_transform.basis.z)
+	hud.show_message("TELETRANSPORTE: %s\n%s" % [title, subtitle], 3.5)
+
+func _on_start_location_chosen(location_id: int) -> void:
+	if mission_system != null:
+		mission_system.choose_start_location(location_id)
+	if camera != null:
+		camera.snap_to_target()
+	if hud != null and bike != null:
+		hud.update_player_transform(bike.global_position, -bike.global_transform.basis.z)
+
+func _restart_night_shift() -> void:
+	_reset_session()
+	if mission_system != null:
+		mission_system.restart_night_shift()
 
 func _visit_building(key: String) -> void:
 	bike.respawn(track.get_building_spawn_transform(key))
@@ -70,6 +163,7 @@ func _reset_session() -> void:
 	elapsed=0.0
 	_started=false
 	_end_message_shown=false
+	hud.update_player_transform(bike.global_position, -bike.global_transform.basis.z)
 	hud.show_message("RAMOS MEJÍA\nRivadavia · Larrea → Necochea",4.0)
 
 func _restart_from_pause() -> void:
@@ -95,7 +189,9 @@ func _setup_inputs() -> void:
 	_bind("visit_hospital",[KEY_1])
 	_bind("visit_coto",[KEY_2])
 	_bind("visit_perla",[KEY_3])
-	_bind("new_mission",[KEY_M])
+	_bind("toggle_map",[KEY_M])
+	_bind("teleport_menu",[KEY_TAB])
+	_bind("new_mission",[KEY_N])
 
 func _bind(action: StringName, keys: Array) -> void:
 	if not InputMap.has_action(action): InputMap.add_action(action)

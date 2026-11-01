@@ -30,6 +30,10 @@ func run() -> void:
 	check(absf(bike.position.y)<0.03,"bike rests on ground")
 	check(track.get_road_distance(bike.position)<0.0,"spawn is on avenue")
 	check(track.get_child_count()>20,"baked geometry present")
+	var tm_node: Node3D = game.get_node_or_null("TrafficManager") as Node3D
+	if tm_node != null:
+		tm_node.call("clear_all_vehicles")
+		tm_node.process_mode = Node.PROCESS_MODE_DISABLED
 	bike.max_speed=18.0
 	Input.action_press("accelerate")
 	var furthest: float = 0.0
@@ -48,6 +52,8 @@ func run() -> void:
 	Input.action_release("accelerate")
 	Input.action_release("steer_left")
 	Input.action_release("steer_right")
+	if tm_node != null:
+		tm_node.process_mode = Node.PROCESS_MODE_INHERIT
 	check(furthest>1630.0,"full avenue drivable; reached %.1f m"%furthest)
 	check(int(track.data["coverage"]["south_block_rows"])==2,"two southern block rows")
 	check(int(track.data["coverage"]["north_block_rows"])==1,"one block north beyond railway")
@@ -160,8 +166,33 @@ func run() -> void:
 	check(bike.position.distance_to(position_before)<0.001,"pause stops bike")
 	game._set_paused(false)
 	check(track.get_crossing_name(track.centerline[-1])=="Necochea","HUD identifies destination")
-	check(track.data.get("featured_places",[]).size()>=25,"featured Ramos Mejía locales and institutions present")
+	check(track.data.get("featured_places",[]).size()>=45,"expanded featured Ramos Mejía locales and downtown corridors present")
 	check(track.data.get("detailed_plazas",[]).size()==4,"four detailed plazas present")
+	check(track.has_node("SectorChunks") and track.get_node("SectorChunks").get_child_count()>20,"spatial sector chunking active for GPU optimization")
+	check(track.data.get("bridges",[]).size()==3 and track.has_node("BridgeCollision"),"Díaz Vélez bridge and two U-bridges present with collision")
+	check(track.data.get("footbridges",[]).size()==1,"pedestrian bridge Moreno-French present")
+	check(track.data.get("railway_walls",[]).size()>10 and track.has_node("RailwayBarrierCollision"),"railway perimeter barriers active outside crossings")
+	check(track.data.get("ramos_boundary",[]).size()>20 and track.data.get("extended_streets",[]).size()>50,"official Ramos Mejía boundary and extended streets present for map")
+	# Verify elevated bridge deck collision on Díaz Vélez bridge and U-bridges
+	for br: Dictionary in track.data.get("bridges",[]):
+		var pts: Array = br["points_3d"]
+		var mid_pt: Array = pts[pts.size() / 2]
+		var b_ray: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
+			Vector3(float(mid_pt[0]), 25.0, float(mid_pt[2])),
+			Vector3(float(mid_pt[0]), 0.5, float(mid_pt[2]))
+		)
+		b_ray.exclude = [bike.get_rid()]
+		var b_hit: Dictionary = space.intersect_ray(b_ray)
+		check(not b_hit.is_empty() and float(b_hit["position"].y) > 2.0, str(br["key"]) + " bridge has elevated driveable deck collision")
+	# Verify HUD simplified panels, M map blocking controls, and TAB teleport destinations
+	var hud: MotoHUD = game.get_node("HUD") as MotoHUD
+	check(hud != null and hud.has_node("Interface/OrderPanel") and hud.has_node("Interface/StatusPanel"),"simplified two-panel HUD active")
+	check(track.get_teleport_destinations().size() > 35,"TAB teleport selector destinations populated")
+	if hud != null:
+		hud.set_map_open(true)
+		check(hud.is_map_open() and not bike.controls_enabled,"opening M map covers screen and disables driving controls")
+		hud.set_map_open(false)
+		check(not hud.is_map_open() and bike.controls_enabled,"closing M map restores driving controls")
 	const MissionSystem = preload("res://scripts/mission_system.gd")
 	var ms: Node3D = game.get("mission_system") as Node3D
 	check(ms != null and int(ms.get("state")) == MissionSystem.State.PICKUP,"mission system starts in pickup state")
@@ -174,5 +205,44 @@ func run() -> void:
 		bike.respawn(Transform3D(Basis.IDENTITY, deliver_pos))
 		for frame: int in range(6): await physics_frame
 		check(int(ms.get("completed_count")) >= 1,"visiting destination address completes delivery mission")
+		# Verify car collision penalty mechanic in delivery mode
+		var money_before: int = int(ms.get("total_money"))
+		var fines_before: int = int(ms.get("total_crash_fines"))
+		var fine: int = ms.call("apply_crash_penalty", 32.0)
+		check(fine > 0 and int(ms.get("total_money")) == money_before - fine, "crashing into car deducts money proportional to impact speed")
+		check(int(ms.get("total_crash_fines")) == fines_before + fine, "crash penalty fines tracked in mission summary")
+	# Verify startup mode selection dialog
+	check(hud != null and hud.has_node("Interface/ModeSelectionOverlay"), "startup mode selection overlay (Free Roam vs Delivery) initialized")
+	# Verify custom user decoration layer and Estatua de Belgrano
+	check(track.user_decorations != null, "custom user decorations layer loaded")
+	var belgrano_statue: Node = track.find_child("EstatuaManuelBelgrano", true, false)
+	check(belgrano_statue != null, "Estatua de Belgrano instantiated in Plazoleta Belgrano")
+	if belgrano_statue != null:
+		var statue_ray: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
+			Vector3(-1191.4, 2.0, 330.0),
+			Vector3(-1191.4, 2.0, 335.0)
+		)
+		statue_ray.exclude = [bike.get_rid()]
+		var statue_hit: Dictionary = space.intersect_ray(statue_ray)
+		check(not statue_hit.is_empty(), "Estatua de Belgrano has solid physical collision")
+	# Verify night lighting, motorcycle headlight, and street corner signs
+	check(bike.has_node("Visual/Headlight") and bike.get_node("Visual/Headlight") is SpotLight3D, "motorcycle night headlight beam present")
+	check(track.has_node("NightLights") and track.get_node("NightLights").get_child_count() > 15, "night streetlights and building lights active")
+	check(track.has_node("StreetCornerSigns") and track.get_node("StreetCornerSigns").get_child_count() > 100, "Argentine street corner direction signs installed")
+	# Verify realistic curbside parked cars and moving traffic system
+	check(track.has_node("ParkedCars") and track.get_node("ParkedCars").get_child_count() > 500, "parked cars populated along curbs in Ramos Mejía")
+	var parked_root: Node3D = track.get_node_or_null("ParkedCars") as Node3D
+	if parked_root != null and parked_root.get_child_count() > 0:
+		var sample_car: Node3D = parked_root.get_child(0) as Node3D
+		var car_pos: Vector3 = sample_car.global_position
+		var car_ray: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
+			car_pos + Vector3(0, 10.0, 0),
+			car_pos + Vector3(0, 0.2, 0)
+		)
+		car_ray.exclude = [bike.get_rid()]
+		var car_hit: Dictionary = space.intersect_ray(car_ray)
+		check(not car_hit.is_empty(), "parked cars have physical obstacle collision")
+	var tm: Node3D = game.get_node_or_null("TrafficManager") as Node3D
+	check(tm != null and int(tm.get("lanes").size()) > 500, "traffic manager initialized with directed street lanes graph")
 	print("MAP_QA failures=",failures)
 	quit(failures)

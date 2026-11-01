@@ -156,9 +156,50 @@ def main():
           'endpoints':{n:{'osm_node_id':i,'lat_lon':geo[i],'point':pts[i]} for n,i in endpoints.items()},
           'route':{'points':line,'osm_node_ids':route,'length_m':dist[end]},'roads':roads,'sections':sections,'crossings':crosses,'buildings':buildings,'railways':railways,'landmarks':landmarks,'trees':vegetation,'ramos_boundary_ways':ramos_boundary_ways}
     data=expand(data,ways,pts)
-    out=ROOT/'assets/maps/ramos_mejia.json'
-    out.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8')
-    print(json.dumps({'length_m':dist[end],'avenue_ways':len(roads),'side_streets':len(data['streets']),'mapped_buildings':len(data['buildings']),'generated_buildings':len(data['generated_buildings']),'railways':len(data['railways'])},ensure_ascii=True,indent=2))
+
+    # 1. Base Map (pure procedural base: streets, railways, base plazas, lots, houses, boundary wall)
+    base_keys = [
+        'name', 'attribution', 'source_url', 'retrieved', 'projection', 'endpoints',
+        'route', 'roads', 'sections', 'crossings', 'streets', 'pavement',
+        'pavement_triangles', 'sidewalk_triangles', 'railways', 'railway_crossings',
+        'railway_walls', 'detailed_plazas', 'landmarks', 'lots', 'houses',
+        'buildings', 'generated_buildings', 'ramos_boundary', 'boundary_wall',
+        'coverage', 'block_density', 'open_passages', 'property_walls',
+        'extended_streets', 'extended_railways'
+    ]
+    base_data = {k: data[k] for k in base_keys if k in data}
+    base_data['name'] = 'Ramos Mejia - Mapa Base Procedural'
+    out_base = ROOT / 'assets/maps/ramos_mejia_base.json'
+    out_base.write_text(json.dumps(base_data, ensure_ascii=False, indent=2), encoding='utf-8')
+
+    # 2. Custom Overlays Layer (modeled in separate file: locales, delivery points, bridges, monuments, trees, lamps)
+    custom_keys = [
+        'name', 'attribution', 'featured_places', 'recognizable_buildings',
+        'tanga', 'bridges', 'footbridges', 'trees', 'street_lamps',
+        'traffic_lights', 'street_signs', 'parked_cars'
+    ]
+    custom_data = {k: data[k] for k in custom_keys if k in data}
+    custom_data['name'] = 'Ramos Mejia - Capa Personalizada'
+    out_custom = ROOT / 'assets/maps/custom_overlays.json'
+    out_custom.write_text(json.dumps(custom_data, ensure_ascii=False, indent=2), encoding='utf-8')
+
+    # 3. Combined map (for tests and backwards compatibility)
+    out = ROOT / 'assets/maps/ramos_mejia.json'
+    out.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+    print(json.dumps({
+        'length_m': dist[end],
+        'avenue_ways': len(roads),
+        'side_streets': len(data['streets']),
+        'mapped_buildings': len(data['buildings']),
+        'lots': len(data.get('lots', [])),
+        'houses': len(data.get('houses', [])),
+        'generated_buildings': len(data['generated_buildings']),
+        'railways': len(data['railways']),
+        'featured_places': len(data.get('featured_places', [])),
+        'bridges': len(data.get('bridges', [])),
+        'base_map_written': str(out_base),
+        'custom_overlays_written': str(out_custom)
+    }, ensure_ascii=True, indent=2))
 
 
 if __name__=='__main__': main()
