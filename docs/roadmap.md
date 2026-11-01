@@ -5,13 +5,25 @@ Cada agente que tome o finalice una tarea debe actualizar el estado correspondie
 
 ---
 
-## 📌 Hito Actual: Consolidación "Agent-First" y Simulación Urbana (Noviembre 2026)
+## 📌 Hito Actual: Sprint `alpha-0.0.2` (En Desarrollo)
 
-Estado general: **Completado y Estable**. Suite de pruebas: **0 fallos**.
+- **Rama activa:** `feat/alpha-0.0.2`
+- **Estado general:** En curso. Incorporando nuevas características y mejoras según prioridades del usuario.
+- **Versión base cerrada:** [`alpha-0.0.1`](https://github.com/facundoraulbistolfi/ramos-delivery-simulator/releases/tag/alpha-0.0.1) *(Release publicada y descargable).*
 
 ---
 
-## ✅ Funcionalidades Completadas y Validadas
+## 🚀 Tareas del Sprint `alpha-0.0.2` (En Curso / Selección de Alcance)
+
+A definir según requerimientos del usuario en este ciclo. Ideas prioritarias del backlog:
+1. **Audio y SFX:** Motor de la moto según aceleración/velocidad, bocina, choques y ambiente nocturno.
+2. **Peatones en Veredas:** Transeúntes caminando por veredas comerciales y cruces peatonales.
+3. **Clima Dinámico:** Alternancia nocturna con lluvia, charcos y reflejos en asfalto.
+4. **Motos & Personalización:** Modelos adicionales de moto o casco.
+
+---
+
+## ✅ Funcionalidades Completadas y Validadas (Base alpha-0.0.1)
 
 - [x] **Pipeline GIS de Ramos Mejía (8,11 km², 577 manzanas):**
   - Malla vial OSM completa, vías del FF.CC. Sarmiento, puentes vehiculares (Díaz Vélez, Papa Francisco) y peatonal (Pepino Tuccio).

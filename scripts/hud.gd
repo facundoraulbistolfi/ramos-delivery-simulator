@@ -18,7 +18,7 @@ const MUTED: Color = Color("a7b6bc")
 const ORANGE: Color = Color("ff9854")
 const CYAN: Color = Color("68d1d2")
 const GREEN: Color = Color("28e070")
-const GAME_VERSION: String = "alpha-0.0.1"
+const GAME_VERSION: String = "alpha-0.0.2"
 
 var _order_panel: PanelContainer
 var _speed_label: Label
