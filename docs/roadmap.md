@@ -13,10 +13,32 @@ Cada agente que tome o finalice una tarea debe actualizar el estado correspondie
 
 ---
 
-## 🚀 Tareas del Sprint `alpha-0.0.2` (En Curso / Selección de Alcance)
+## 🚀 Tareas del Sprint `alpha-0.0.2` (En Curso)
 
-A definir según requerimientos del usuario en este ciclo. Ideas prioritarias del backlog:
-1. **Audio y SFX:** Motor de la moto según aceleración/velocidad, bocina, choques y ambiente nocturno.
+- [x] **Menú Principal Inicial con Fondo 3D Animado (`alpha-0.0.2`):**
+  - Cámara cinemática orbital (`MotoChaseCamera.cinematic_mode`) con giro panorámico continuo de 360° sobre el centro iluminado de Ramos Mejía (La Tanga / Av. de Mayo) con tráfico en movimiento.
+  - Presentación estilizada de "DELIVERY SIMULATOR", versión `alpha-0.0.2` y tres opciones directas: Modo Delivery, Modo Libre y Opciones (`[1]`, `[2]`, `[3]`, `[ESC]`).
+  - *Referencia:* [ADR-0008: Menú Principal, Manual de Delivery, Turno de 15 Minutos, Podio de Récords y Opciones](adr/0008-menu-principal-modos-y-configuracion.md).
+- [x] **Modo Delivery Arcade & Turno de 15 Minutos:**
+  - Manual de instrucciones previo al inicio ("Manual del Repartidor") detallando reglas y penalizaciones.
+  - Spawn fijo y obligatorio en «La Tanga de Ramos» (Rivadavia y Av. de Mayo).
+  - Turno cronometrado de 15 minutos exactos (`900.0 s`).
+  - Bloqueo estricto de teletransporte (`[TAB]`) y atajos rápidos a edificios.
+  - Bloqueo de cancelación/cambio de orden una vez aceptado un pedido.
+  - Podio histórico de los 5 mejores puntajes (Highscores) guardado en disco (`user://highscores.json`).
+  - *Referencia:* [ADR-0008: Menú Principal, Manual de Delivery, Turno de 15 Minutos, Podio de Récords y Opciones](adr/0008-menu-principal-modos-y-configuracion.md).
+- [x] **Menú de Opciones y Configuración Persistente:**
+  - Pantalla completa toggleable (`DisplayServer.window_set_mode`).
+  - Sombras dinámicas activables/desactivables (soluciona titileos y optimiza rendimiento en GPUs integradas).
+  - Selector de densidad de tráfico (Baja ~12, Normal ~24, Alta ~36 autos).
+  - Controles de volumen con sliders: Maestro, Efectos (SFX) y Ambiente.
+  - Guardado y carga automática en `user://settings.json`.
+  - *Referencia:* [ADR-0008: Menú Principal, Manual de Delivery, Turno de 15 Minutos, Podio de Récords y Opciones](adr/0008-menu-principal-modos-y-configuracion.md).
+
+---
+
+## 📌 Próximas Tareas del Backlog para Continuar el Sprint:
+1. **Audio y SFX:** Motor de la moto según aceleración/velocidad, bocina, choques y ambiente urbano.
 2. **Peatones en Veredas:** Transeúntes caminando por veredas comerciales y cruces peatonales.
 3. **Clima Dinámico:** Alternancia nocturna con lluvia, charcos y reflejos en asfalto.
 4. **Motos & Personalización:** Modelos adicionales de moto o casco.

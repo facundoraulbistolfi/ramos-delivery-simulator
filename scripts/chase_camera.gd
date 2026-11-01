@@ -4,10 +4,24 @@ extends Camera3D
 @export var target_path: NodePath
 var close_view: bool = false
 var _snap_next_frame: bool = true
+var cinematic_mode: bool = false
+var _cinematic_angle: float = 0.0
+const CINEMATIC_CENTER: Vector3 = Vector3(-1380.0, 1.5, 120.0)
+const CINEMATIC_RADIUS: float = 45.0
+const CINEMATIC_HEIGHT: float = 14.5
+const CINEMATIC_ROTATION_SPEED: float = 0.08
 @onready var target: MotoBike = get_node(target_path) as MotoBike
 
 
 func _physics_process(delta: float) -> void:
+	if cinematic_mode:
+		_cinematic_angle += CINEMATIC_ROTATION_SPEED * delta
+		var offset: Vector3 = Vector3(cos(_cinematic_angle) * CINEMATIC_RADIUS, CINEMATIC_HEIGHT, sin(_cinematic_angle) * CINEMATIC_RADIUS)
+		global_position = CINEMATIC_CENTER + offset
+		look_at(CINEMATIC_CENTER + Vector3.UP * 1.5, Vector3.UP)
+		fov = 68.0
+		return
+
 	if not is_instance_valid(target):
 		return
 	var follow_distance: float = 4.6 if close_view else 7.4
@@ -32,3 +46,4 @@ func _physics_process(delta: float) -> void:
 
 func snap_to_target() -> void:
 	_snap_next_frame = true
+

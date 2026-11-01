@@ -10,6 +10,7 @@ enum GameMode {
 }
 
 var current_game_mode: int = GameMode.DELIVERY
+var is_in_main_menu: bool = true
 var elapsed: float = 0.0
 var _started: bool = false
 var _paused: bool = false
@@ -48,14 +49,23 @@ func _ready() -> void:
 	hud.restart_requested.connect(_restart_from_pause)
 	hud.game_mode_chosen.connect(_on_game_mode_chosen)
 	hud.switch_mode_requested.connect(_on_switch_mode_requested)
+	hud.options_saved.connect(_apply_settings)
+	hud.return_to_main_menu_requested.connect(_return_to_main_menu)
+	hud.quit_game_requested.connect(func() -> void: get_tree().quit())
 	bike.vehicle_crashed.connect(_on_bike_vehicle_crashed)
+
+	var initial_settings: Dictionary = hud.load_settings()
+	_apply_settings(initial_settings)
 
 	var is_headless: bool = DisplayServer.get_name() == "headless"
 	if is_headless:
+		is_in_main_menu = false
+		camera.cinematic_mode = false
 		current_game_mode = GameMode.DELIVERY
 		hud.set_delivery_mode_active(true)
+		hud.set_gameplay_panels_visible(true)
 	else:
-		hud.show_mode_selection_dialog()
+		_return_to_main_menu()
 
 func _physics_process(delta: float) -> void:
 	if _paused: return
@@ -71,6 +81,8 @@ func _physics_process(delta: float) -> void:
 	hud.update_route(bike.get_speed_kmh(),bike.boost,station,track.get_track_length(),elapsed,track.get_crossing_name(bike.global_position))
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_in_main_menu:
+		return
 	if event.is_action_pressed("pause"):
 		if hud.is_map_open():
 			hud.set_map_open(false)
@@ -83,24 +95,36 @@ func _unhandled_input(event: InputEvent) -> void:
 		hud.toggle_map()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("teleport_menu") and not _paused:
-		hud.toggle_teleport_menu()
+		if current_game_mode == GameMode.DELIVERY:
+			hud.show_message("MODO DELIVERY ACTIVO\nTeletransporte deshabilitado en este modo competitivo.", 2.5)
+		else:
+			hud.toggle_teleport_menu()
 		get_viewport().set_input_as_handled()
 	elif hud.is_blocking_gameplay():
 		return
 	elif event.is_action_pressed("reset") and not _paused:
-		_reset_session()
+		if current_game_mode == GameMode.DELIVERY:
+			_restart_night_shift()
+		else:
+			_reset_session()
 	elif event.is_action_pressed("camera") and not _paused:
 		camera.close_view=not camera.close_view
 	elif event.is_action_pressed("landmark") and not _paused:
-		bike.respawn(track.get_tanga_spawn_transform())
-		camera.snap_to_target()
-		hud.show_message("LA TANGA DE RAMOS\nRivadavia / Avenida de Mayo",3.0)
+		if current_game_mode == GameMode.DELIVERY:
+			hud.show_message("MODO DELIVERY ACTIVO\nAtajos deshabilitados durante el turno de reparto.", 2.5)
+		else:
+			bike.respawn(track.get_tanga_spawn_transform())
+			camera.snap_to_target()
+			hud.show_message("LA TANGA DE RAMOS\nRivadavia / Avenida de Mayo",3.0)
 	elif event.is_action_pressed("visit_hospital") and not _paused:
-		_visit_building("san_juan")
+		if current_game_mode != GameMode.DELIVERY:
+			_visit_building("san_juan")
 	elif event.is_action_pressed("visit_coto") and not _paused:
-		_visit_building("coto")
+		if current_game_mode != GameMode.DELIVERY:
+			_visit_building("coto")
 	elif event.is_action_pressed("visit_perla") and not _paused:
-		_visit_building("la_perla")
+		if current_game_mode != GameMode.DELIVERY:
+			_visit_building("la_perla")
 	elif event.is_action_pressed("new_mission") and not _paused and mission_system != null:
 		if current_game_mode == GameMode.DELIVERY:
 			mission_system.start_new_mission(true)
@@ -109,6 +133,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _on_game_mode_chosen(mode: int) -> void:
 	current_game_mode = mode
+	is_in_main_menu = false
+	camera.cinematic_mode = false
+	camera.snap_to_target()
+	hud.set_gameplay_panels_visible(true)
+	bike.controls_enabled = true
 	if mode == GameMode.DELIVERY:
 		hud.set_delivery_mode_active(true)
 		if mission_system != null:
@@ -119,6 +148,37 @@ func _on_game_mode_chosen(mode: int) -> void:
 			mission_system.set_free_roam_mode()
 		hud.show_message("MODO LIBRE / DEBUG ACTIVADO\nExplorá Ramos Mejía sin límites · [TAB] Teletransporte · [M] Mapa", 4.5)
 
+func _return_to_main_menu() -> void:
+	_set_paused(false)
+	is_in_main_menu = true
+	camera.cinematic_mode = true
+	bike.controls_enabled = false
+	hud.close_all_modals()
+	hud.set_gameplay_panels_visible(false)
+	hud.show_mode_selection_dialog()
+
+func _apply_settings(settings: Dictionary) -> void:
+	# 1. Fullscreen
+	var fullscreen: bool = bool(settings.get("fullscreen", false))
+	if DisplayServer.get_name() != "headless":
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
+
+	# 2. Dynamic sun shadows
+	var shadows: bool = bool(settings.get("shadows", true))
+	var sun: DirectionalLight3D = get_node_or_null("Sun") as DirectionalLight3D
+	if sun != null:
+		sun.shadow_enabled = shadows
+
+	# 3. Traffic density
+	var density_level: int = int(settings.get("traffic_density", 1))
+	if traffic_manager != null and traffic_manager.has_method("set_traffic_density"):
+		traffic_manager.set_traffic_density(density_level)
+
+	# 4. Master audio volume
+	var master_vol: float = float(settings.get("master_volume", 1.0))
+	if AudioServer.get_bus_count() > 0:
+		AudioServer.set_bus_volume_db(0, linear_to_db(maxf(0.001, master_vol)))
+
 func _on_switch_mode_requested() -> void:
 	_set_paused(false)
 	hud.show_mode_selection_dialog()
@@ -128,6 +188,10 @@ func _on_bike_vehicle_crashed(impact_kmh: float, _collider: Object) -> void:
 		mission_system.apply_crash_penalty(impact_kmh)
 
 func _on_hud_overlay_state_changed(is_blocking_drive: bool) -> void:
+	if is_in_main_menu:
+		if is_instance_valid(bike):
+			bike.controls_enabled = false
+		return
 	if is_instance_valid(bike):
 		bike.controls_enabled = not is_blocking_drive
 
@@ -168,7 +232,10 @@ func _reset_session() -> void:
 
 func _restart_from_pause() -> void:
 	_set_paused(false)
-	_reset_session()
+	if current_game_mode == GameMode.DELIVERY:
+		_restart_night_shift()
+	else:
+		_reset_session()
 
 func _set_paused(value: bool) -> void:
 	_paused=value
@@ -199,3 +266,4 @@ func _bind(action: StringName, keys: Array) -> void:
 		var input_event: InputEventKey = InputEventKey.new()
 		input_event.physical_keycode=key
 		if not InputMap.action_has_event(action,input_event): InputMap.action_add_event(action,input_event)
+

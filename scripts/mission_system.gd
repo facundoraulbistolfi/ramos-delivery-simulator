@@ -22,8 +22,9 @@ enum State {
 	SHIFT_SUMMARY = 5,
 }
 
-const SHIFT_DURATION: float = 600.0 ## 10 minutes (600 s)
+const SHIFT_DURATION: float = 900.0 ## 15 minutes (900 s)
 const TRIGGER_RADIUS: float = 14.5
+const HIGHSCORES_PATH: String = "user://highscores.json"
 
 var track: MotoTrack
 var bike: MotoBike
@@ -256,21 +257,6 @@ func choose_start_location(location_id: int) -> void:
 
 
 func start_delivery_mode() -> void:
-	restart_night_shift()
-
-
-func set_free_roam_mode() -> void:
-	shift_active = false
-	state = State.IDLE
-	_update_marker_visibility(false)
-	if is_instance_valid(_bike_cargo_box):
-		_bike_cargo_box.visible = false
-	_emit_state()
-
-
-func restart_night_shift() -> void:
-	state = State.START_SELECTION
-	shift_active = false
 	shift_time_remaining = SHIFT_DURATION
 	total_money = 0
 	total_tips = 0
@@ -283,8 +269,69 @@ func restart_night_shift() -> void:
 	_update_marker_visibility(false)
 	if is_instance_valid(_bike_cargo_box):
 		_bike_cargo_box.visible = false
-	start_location_dialog_requested.emit(START_LOCATIONS)
+	if bike != null and track != null:
+		bike.respawn(track.get_tanga_spawn_transform())
+	shift_active = true
+	var is_headless: bool = DisplayServer.get_name() == "headless"
+	if is_headless:
+		_start_direct_test_mission()
+	else:
+		request_new_order_selection()
 	_emit_state()
+
+
+func set_free_roam_mode() -> void:
+	shift_active = false
+	state = State.IDLE
+	_update_marker_visibility(false)
+	if is_instance_valid(_bike_cargo_box):
+		_bike_cargo_box.visible = false
+	_emit_state()
+
+
+func restart_night_shift() -> void:
+	start_delivery_mode()
+
+
+func load_highscores() -> Array[Dictionary]:
+	if not FileAccess.file_exists(HIGHSCORES_PATH):
+		return []
+	var file: FileAccess = FileAccess.open(HIGHSCORES_PATH, FileAccess.READ)
+	if file == null:
+		return []
+	var json_str: String = file.get_as_text()
+	var parsed: Variant = JSON.parse_string(json_str)
+	if parsed is Array:
+		var list: Array[Dictionary] = []
+		for item: Variant in (parsed as Array):
+			if item is Dictionary:
+				list.append(item as Dictionary)
+		return list
+	return []
+
+
+func save_highscore(score: int, orders: int, fines: int) -> Dictionary:
+	var list: Array[Dictionary] = load_highscores()
+	var now_date: String = Time.get_date_string_from_system()
+	var entry: Dictionary = {
+		"score": score,
+		"orders": orders,
+		"fines": fines,
+		"date": now_date
+	}
+	list.append(entry)
+	list.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("score", 0)) > int(b.get("score", 0))
+	)
+	var rank: int = list.find(entry) + 1
+	var is_record: bool = (rank == 1)
+	if list.size() > 5:
+		list = list.slice(0, 5)
+
+	var file: FileAccess = FileAccess.open(HIGHSCORES_PATH, FileAccess.WRITE)
+	if file != null:
+		file.store_string(JSON.stringify(list, "\t"))
+	return {"is_record": is_record, "rank": rank, "highscores": list}
 
 
 func apply_crash_penalty(impact_kmh: float) -> int:
@@ -324,6 +371,12 @@ func apply_crash_penalty(impact_kmh: float) -> int:
 
 
 func start_new_mission(_silent: bool = false) -> void:
+	if state == State.PICKUP or state == State.DELIVER:
+		mission_notification.emit(
+			"¡PEDIDO EN CURSO!\nNo podés cambiar de pedido hasta completar la entrega actual.",
+			3.5
+		)
+		return
 	request_new_order_selection()
 
 
@@ -420,13 +473,17 @@ func _end_night_shift() -> void:
 	shift_active = false
 	state = State.SHIFT_SUMMARY
 	_update_marker_visibility(false)
+	var hs_result: Dictionary = save_highscore(total_money, completed_count, total_crash_fines)
 	var summary: Dictionary = {
 		"total_money": total_money,
 		"total_tips": total_tips,
 		"completed_count": completed_count,
 		"total_crash_fines": total_crash_fines,
 		"crash_count": crash_count,
-		"duration": SHIFT_DURATION
+		"duration": SHIFT_DURATION,
+		"highscores": hs_result.get("highscores", []),
+		"is_record": hs_result.get("is_record", false),
+		"rank": hs_result.get("rank", 1)
 	}
 	shift_completed_summary.emit(summary)
 	_emit_state()

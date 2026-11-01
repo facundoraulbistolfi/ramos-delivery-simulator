@@ -11,6 +11,9 @@ signal order_offer_chosen(offer_index: int)
 signal shift_restart_requested
 signal game_mode_chosen(mode: int)
 signal switch_mode_requested
+signal options_saved(settings: Dictionary)
+signal return_to_main_menu_requested
+signal quit_game_requested
 
 const INK: Color = Color("101d29")
 const PAPER: Color = Color("f4eee2")
@@ -21,6 +24,7 @@ const GREEN: Color = Color("28e070")
 const GAME_VERSION: String = "alpha-0.0.2"
 
 var _order_panel: PanelContainer
+var _status_panel: PanelContainer
 var _speed_label: Label
 var _speed_bar: ProgressBar
 var _boost_bar: ProgressBar
@@ -69,15 +73,34 @@ var _summary_orders_label: Label
 var _summary_tips_label: Label
 var _summary_fines_label: Label
 var _summary_duration_label: Label
+var _summary_highscores_vbox: VBoxContainer
+var _summary_record_badge: Label
 
-# Mode selection dialog (Free Roam vs Delivery)
+# Mode selection dialog & Main Menu
 var _mode_selection_overlay: ColorRect
 var _mode_selection_open: bool = false
+var _briefing_overlay: ColorRect
+var _briefing_open: bool = false
+var _options_overlay: ColorRect
+var _options_open: bool = false
+var _was_options_from_pause: bool = false
+var _current_game_mode: int = 1
+
+# Settings persistence & controls
+const SETTINGS_PATH: String = "user://settings.json"
+var _settings_data: Dictionary = {}
+var _fullscreen_check: CheckBox
+var _shadows_check: CheckBox
+var _traffic_option: OptionButton
+var _master_vol_slider: HSlider
+var _sfx_vol_slider: HSlider
+var _music_vol_slider: HSlider
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	layer = 10
+	load_settings()
 	var screen: Control = Control.new()
 	screen.name = "Interface"
 	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -93,6 +116,8 @@ func _ready() -> void:
 	_build_map_overlay(screen)
 	_build_teleport_overlay(screen)
 	_build_mode_selection_dialog(screen)
+	_build_delivery_briefing_dialog(screen)
+	_build_options_dialog(screen)
 	_build_start_location_dialog(screen)
 	_build_order_selection_dialog(screen)
 	_build_shift_summary_dialog(screen)
@@ -153,7 +178,44 @@ func is_teleport_open() -> bool:
 
 
 func is_blocking_gameplay() -> bool:
-	return _map_open or _teleport_open or _start_dialog_open or _order_dialog_open or _summary_dialog_open or _mode_selection_open
+	return _map_open or _teleport_open or _start_dialog_open or _order_dialog_open or _summary_dialog_open or _mode_selection_open or _briefing_open or _options_open
+
+
+func set_gameplay_panels_visible(vis: bool) -> void:
+	if is_instance_valid(_status_panel):
+		_status_panel.visible = vis
+	if is_instance_valid(_order_panel):
+		_order_panel.visible = vis and (_current_game_mode == 1)
+
+
+func load_settings() -> Dictionary:
+	var default_settings: Dictionary = {
+		"fullscreen": false,
+		"shadows": true,
+		"traffic_density": 1,
+		"master_volume": 1.0,
+		"sfx_volume": 1.0,
+		"music_volume": 0.8
+	}
+	if not FileAccess.file_exists(SETTINGS_PATH):
+		_settings_data = default_settings
+		return default_settings
+	var file: FileAccess = FileAccess.open(SETTINGS_PATH, FileAccess.READ)
+	if file == null:
+		_settings_data = default_settings
+		return default_settings
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if parsed is Dictionary:
+		for k: String in (parsed as Dictionary).keys():
+			default_settings[k] = (parsed as Dictionary)[k]
+	_settings_data = default_settings
+	return default_settings
+
+
+func save_settings(settings: Dictionary) -> void:
+	var file: FileAccess = FileAccess.open(SETTINGS_PATH, FileAccess.WRITE)
+	if file != null:
+		file.store_string(JSON.stringify(settings, "\t"))
 
 
 func show_mode_selection_dialog() -> void:
@@ -174,7 +236,49 @@ func is_mode_selection_open() -> bool:
 	return _mode_selection_open
 
 
+func show_delivery_briefing_dialog() -> void:
+	_briefing_open = true
+	if is_instance_valid(_briefing_overlay):
+		_briefing_overlay.visible = true
+	overlay_state_changed.emit(is_blocking_gameplay())
+
+
+func close_delivery_briefing_dialog() -> void:
+	_briefing_open = false
+	if is_instance_valid(_briefing_overlay):
+		_briefing_overlay.visible = false
+	overlay_state_changed.emit(is_blocking_gameplay())
+
+
+func show_options_dialog(from_pause: bool = false) -> void:
+	_was_options_from_pause = from_pause
+	_options_open = true
+	if is_instance_valid(_options_overlay):
+		_options_overlay.visible = true
+		if is_instance_valid(_fullscreen_check):
+			_fullscreen_check.button_pressed = bool(_settings_data.get("fullscreen", false))
+		if is_instance_valid(_shadows_check):
+			_shadows_check.button_pressed = bool(_settings_data.get("shadows", true))
+		if is_instance_valid(_traffic_option):
+			_traffic_option.selected = int(_settings_data.get("traffic_density", 1))
+		if is_instance_valid(_master_vol_slider):
+			_master_vol_slider.value = float(_settings_data.get("master_volume", 1.0))
+		if is_instance_valid(_sfx_vol_slider):
+			_sfx_vol_slider.value = float(_settings_data.get("sfx_volume", 1.0))
+		if is_instance_valid(_music_vol_slider):
+			_music_vol_slider.value = float(_settings_data.get("music_volume", 0.8))
+	overlay_state_changed.emit(is_blocking_gameplay())
+
+
+func close_options_dialog() -> void:
+	_options_open = false
+	if is_instance_valid(_options_overlay):
+		_options_overlay.visible = false
+	overlay_state_changed.emit(is_blocking_gameplay())
+
+
 func set_delivery_mode_active(active: bool) -> void:
+	_current_game_mode = 1 if active else 2
 	if is_instance_valid(_order_panel):
 		_order_panel.visible = active
 
@@ -225,6 +329,30 @@ func show_shift_summary(summary: Dictionary) -> void:
 			var fines: int = int(summary.get("total_crash_fines", 0))
 			var crashes: int = int(summary.get("crash_count", 0))
 			_summary_fines_label.text = "-$ %d (%d)" % [fines, crashes]
+		if is_instance_valid(_summary_record_badge):
+			var is_record: bool = bool(summary.get("is_record", false))
+			_summary_record_badge.visible = is_record
+		if is_instance_valid(_summary_highscores_vbox):
+			for child: Node in _summary_highscores_vbox.get_children():
+				child.queue_free()
+			var highscores: Array = summary.get("highscores", [])
+			var player_rank: int = int(summary.get("rank", 0))
+			if highscores.is_empty():
+				var none_lbl: Label = _label(_summary_highscores_vbox, "Sin registros previos todavía", 12, MUTED)
+				none_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			else:
+				for i: int in range(highscores.size()):
+					var h: Dictionary = highscores[i] as Dictionary
+					var row_str: String = "#%d  ·  $ %d neto  |  %d entregas  |  multas -$ %d  (%s)" % [
+						i + 1,
+						int(h.get("score", 0)),
+						int(h.get("orders", 0)),
+						int(h.get("fines", 0)),
+						str(h.get("date", ""))
+					]
+					var color: Color = ORANGE if (i + 1 == player_rank) else PAPER
+					var item_lbl: Label = _label(_summary_highscores_vbox, row_str, 12, color)
+					item_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	overlay_state_changed.emit(is_blocking_gameplay())
 
 
@@ -237,6 +365,8 @@ func close_shift_summary() -> void:
 
 func close_all_modals() -> void:
 	close_mode_selection_dialog()
+	close_delivery_briefing_dialog()
+	close_options_dialog()
 	close_start_location_dialog()
 	close_order_selection_dialog()
 	close_shift_summary()
@@ -251,15 +381,31 @@ func _input(event: InputEvent) -> void:
 	if _mode_selection_open:
 		if key == KEY_1 or key == KEY_KP_1:
 			close_mode_selection_dialog()
-			game_mode_chosen.emit(1)
+			show_delivery_briefing_dialog()
 			get_viewport().set_input_as_handled()
 		elif key == KEY_2 or key == KEY_KP_2:
 			close_mode_selection_dialog()
 			game_mode_chosen.emit(2)
 			get_viewport().set_input_as_handled()
-		elif key == KEY_ENTER or key == KEY_SPACE:
+		elif key == KEY_3 or key == KEY_KP_3:
 			close_mode_selection_dialog()
+			show_options_dialog(false)
+			get_viewport().set_input_as_handled()
+		elif key == KEY_ESCAPE:
+			quit_game_requested.emit()
+			get_viewport().set_input_as_handled()
+	elif _briefing_open:
+		if key == KEY_ENTER or key == KEY_SPACE or key == KEY_1 or key == KEY_KP_1:
+			close_delivery_briefing_dialog()
 			game_mode_chosen.emit(1)
+			get_viewport().set_input_as_handled()
+		elif key == KEY_ESCAPE:
+			close_delivery_briefing_dialog()
+			show_mode_selection_dialog()
+			get_viewport().set_input_as_handled()
+	elif _options_open:
+		if key == KEY_ESCAPE or key == KEY_ENTER:
+			_save_and_close_options()
 			get_viewport().set_input_as_handled()
 	elif _start_dialog_open:
 		if key >= KEY_1 and key <= KEY_6:
@@ -286,6 +432,10 @@ func _input(event: InputEvent) -> void:
 			close_shift_summary()
 			shift_restart_requested.emit()
 			get_viewport().set_input_as_handled()
+		elif key == KEY_ESCAPE or key == KEY_M:
+			close_shift_summary()
+			return_to_main_menu_requested.emit()
+			get_viewport().set_input_as_handled()
 
 
 func toggle_map() -> void:
@@ -307,6 +457,9 @@ func set_map_open(open: bool) -> void:
 
 
 func toggle_teleport_menu() -> void:
+	if _current_game_mode == 1:
+		show_message("MODO DELIVERY ACTIVO\nTeletransporte deshabilitado en este modo competitivo.", 2.5)
+		return
 	set_teleport_open(not _teleport_open)
 
 
@@ -450,6 +603,7 @@ func _build_order_panel(screen: Control) -> void:
 func _build_status_panel(screen: Control) -> void:
 	var panel: PanelContainer = _panel(screen, Rect2(-328.0, 24.0, 304.0, 168.0), Vector2.RIGHT)
 	panel.name = "StatusPanel"
+	_status_panel = panel
 	var rows: VBoxContainer = _rows(panel, 5)
 
 	# Current street / bridge location at the top
@@ -647,23 +801,39 @@ func _build_pause(screen: Control) -> void:
 	_pause_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_pause_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	screen.add_child(_pause_overlay)
-	var panel: PanelContainer = _panel(_pause_overlay, Rect2(-210.0, -195.0, 420.0, 390.0), Vector2(0.5, 0.5))
+	var panel: PanelContainer = _panel(_pause_overlay, Rect2(-220.0, -220.0, 440.0, 440.0), Vector2(0.5, 0.5))
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	var rows: VBoxContainer = _rows(panel, 14)
+	var rows: VBoxContainer = _rows(panel, 12)
 	rows.alignment = BoxContainer.ALIGNMENT_CENTER
-	var title: Label = _label(rows, "EN PAUSA", 34, PAPER)
+	var title: Label = _label(rows, "EN PAUSA", 32, PAPER)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var subtitle: Label = _label(rows, "Ramos Mejía · Recorrido y Reparto", 14, MUTED)
+	var subtitle: Label = _label(rows, "Ramos Mejía · Delivery Simulator", 13, CYAN)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_resume_button = _button(rows, "SEGUIR RODANDO")
+
+	_resume_button = _button(rows, "SEGUIR RODANDO [ESC]")
 	_resume_button.pressed.connect(func() -> void: resume_requested.emit())
+
+	var restart_button: Button = _button(rows, "REINICIAR PARTIDA [R]")
+	restart_button.pressed.connect(func() -> void: restart_requested.emit())
+
+	var options_btn: Button = _button(rows, "CONFIGURACIÓN Y OPCIONES")
+	options_btn.pressed.connect(func() -> void:
+		_pause_overlay.hide()
+		show_options_dialog(true)
+	)
+
 	var switch_mode_btn: Button = _button(rows, "CAMBIAR MODO DE JUEGO")
 	switch_mode_btn.pressed.connect(func() -> void:
 		_pause_overlay.hide()
 		switch_mode_requested.emit()
 	)
-	var restart_button: Button = _button(rows, "REINICIAR SESIÓN")
-	restart_button.pressed.connect(func() -> void: restart_requested.emit())
+
+	var menu_btn: Button = _button(rows, "VOLVER AL MENÚ PRINCIPAL")
+	menu_btn.pressed.connect(func() -> void:
+		_pause_overlay.hide()
+		return_to_main_menu_requested.emit()
+	)
+
 	var hint: Label = _label(rows, "ESC para continuar", 12, MUTED)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_pause_overlay.hide()
@@ -672,25 +842,29 @@ func _build_pause(screen: Control) -> void:
 func _build_mode_selection_dialog(screen: Control) -> void:
 	_mode_selection_overlay = ColorRect.new()
 	_mode_selection_overlay.name = "ModeSelectionOverlay"
-	_mode_selection_overlay.color = Color(0.02, 0.04, 0.07, 0.94)
+	_mode_selection_overlay.color = Color(0.015, 0.03, 0.05, 0.55)
 	_mode_selection_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_mode_selection_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	_mode_selection_overlay.visible = false
 	screen.add_child(_mode_selection_overlay)
 
-	var modal: PanelContainer = _panel(_mode_selection_overlay, Rect2(-430.0, -260.0, 860.0, 520.0), Vector2(0.5, 0.5))
+	var modal: PanelContainer = _panel(_mode_selection_overlay, Rect2(-470.0, -280.0, 940.0, 560.0), Vector2(0.5, 0.5))
 	modal.mouse_filter = Control.MOUSE_FILTER_STOP
-	var rows: VBoxContainer = _rows(modal, 16)
+	var rows: VBoxContainer = _rows(modal, 14)
 	rows.alignment = BoxContainer.ALIGNMENT_CENTER
 
-	var title: Label = _label(rows, "RAMOS MEJÍA: SELECCIÓN DE MODO", 26, PAPER)
+	var badge: Label = _label(rows, "★ RAMOS MEJÍA 3D ★", 13, ORANGE)
+	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	var title: Label = _label(rows, "DELIVERY SIMULATOR", 36, PAPER)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var subtitle: Label = _label(rows, "Elegí tu experiencia de juego para recorrer el barrio", 14, CYAN)
+
+	var subtitle: Label = _label(rows, "Versión %s · Conducción nocturna urbana" % GAME_VERSION, 14, CYAN)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	var cards_row: HBoxContainer = HBoxContainer.new()
 	cards_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	cards_row.add_theme_constant_override("separation", 20)
+	cards_row.add_theme_constant_override("separation", 16)
 	rows.add_child(cards_row)
 
 	# --- CARD 1: MODO DELIVERY ---
@@ -701,23 +875,25 @@ func _build_mode_selection_dialog(screen: Control) -> void:
 
 	var c1_header: Label = _label(c1_vbox, "[1] MODO DELIVERY", 18, ORANGE)
 	c1_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var c1_sub: Label = _label(c1_vbox, "Turno de 10 min · Misiones y propinas", 12, MUTED)
+	var c1_sub: Label = _label(c1_vbox, "Turno 15 min · Desafío y Récords", 11, MUTED)
 	c1_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	var c1_desc: Label = _label(c1_vbox,
-		"• Elegí tu punto de partida en el centro o plazas de Ramos.\n" +
-		"• 3 opciones simultáneas de pedidos gastronómicos.\n" +
-		"• Retirá en restaurantes y entregá a tiempo para ganar propinas.\n" +
-		"• ¡Atención al tráfico! Chocar contra autos (en circulación o estacionados) descuenta plata de tu billetera según la gravedad del impacto.",
+		"• Turno contrarreloj de 15 minutos.\n" +
+		"• Salida fija en «La Tanga de Ramos».\n" +
+		"• 3 opciones de pedidos gastronómicos reales.\n" +
+		"• Propinas dinámicas según tiempo PAR.\n" +
+		"• Chocar autos descuenta dinero de tu billetera.\n" +
+		"• Sin teletransporte: manejo a puro asfalto.",
 		12, PAPER
 	)
 	c1_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	c1_desc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
-	var btn1: Button = _button(c1_vbox, "ELEGIR MODO DELIVERY [1]")
+	var btn1: Button = _button(c1_vbox, "MODO DELIVERY [1]")
 	btn1.pressed.connect(func() -> void:
 		close_mode_selection_dialog()
-		game_mode_chosen.emit(1)
+		show_delivery_briefing_dialog()
 	)
 
 	# --- CARD 2: MODO LIBRE / DEBUG ---
@@ -726,30 +902,261 @@ func _build_mode_selection_dialog(screen: Control) -> void:
 	var c2_vbox: VBoxContainer = _rows(card2, 10)
 	cards_row.add_child(card2)
 
-	var c2_header: Label = _label(c2_vbox, "[2] MODO LIBRE / DEBUG", 18, CYAN)
+	var c2_header: Label = _label(c2_vbox, "[2] MODO LIBRE", 18, CYAN)
 	c2_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var c2_sub: Label = _label(c2_vbox, "Paseo libre · Teletransporte sin límites", 12, MUTED)
+	var c2_sub: Label = _label(c2_vbox, "Paseo sin fin · Teletransporte", 11, MUTED)
 	c2_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	var c2_desc: Label = _label(c2_vbox,
-		"• Explorá todo el mapa de Ramos Mejía a tu propio ritmo.\n" +
-		"• Menú completo de teletransporte rápido [TAB] a todas las esquinas y puentes.\n" +
-		"• Mapa interactivo [M] orientado al Norte.\n" +
-		"• Atajos rápidos a puntos clave y monumentos.\n" +
-		"• Sin misiones obligatorias ni penalizaciones por choque.",
+		"• Explorá todo Ramos Mejía a tu ritmo.\n" +
+		"• Menú de teletransporte rápido [TAB] a 39 puntos.\n" +
+		"• Plano interactivo de calles [M] con nombres.\n" +
+		"• Pedidos opcionales en cualquier momento [N].\n" +
+		"• Sin penalizaciones por choque ni límite de tiempo.",
 		12, PAPER
 	)
 	c2_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	c2_desc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
-	var btn2: Button = _button(c2_vbox, "ELEGIR MODO LIBRE [2]")
+	var btn2: Button = _button(c2_vbox, "MODO LIBRE [2]")
 	btn2.pressed.connect(func() -> void:
 		close_mode_selection_dialog()
 		game_mode_chosen.emit(2)
 	)
 
-	var footer: Label = _label(rows, "Presioná [1] o [2] en el teclado o hacé click en el modo deseado.", 12, MUTED)
-	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# --- CARD 3: OPCIONES ---
+	var card3: PanelContainer = PanelContainer.new()
+	card3.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var c3_vbox: VBoxContainer = _rows(card3, 10)
+	cards_row.add_child(card3)
+
+	var c3_header: Label = _label(c3_vbox, "[3] OPCIONES", 18, GREEN)
+	c3_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var c3_sub: Label = _label(c3_vbox, "Gráficos, Pantalla y Audio", 11, MUTED)
+	c3_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	var c3_desc: Label = _label(c3_vbox,
+		"• Pantalla completa y ventana.\n" +
+		"• Sombras dinámicas (on/off para GPUs modestas).\n" +
+		"• Densidad del tráfico automotor.\n" +
+		"• Ajuste de volumen maestro, moto y ciudad.\n" +
+		"• Guardado automático de preferencias.",
+		12, PAPER
+	)
+	c3_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	c3_desc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var btn3: Button = _button(c3_vbox, "OPCIONES [3]")
+	btn3.pressed.connect(func() -> void:
+		close_mode_selection_dialog()
+		show_options_dialog(false)
+	)
+
+	var footer_row: HBoxContainer = HBoxContainer.new()
+	rows.add_child(footer_row)
+
+	var footer_lbl: Label = _label(footer_row, "Presioná [1], [2] o [3] para elegir · [ESC] Salir del juego", 12, MUTED)
+	footer_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var quit_btn: Button = _button(footer_row, "SALIR DEL JUEGO [ESC]")
+	quit_btn.pressed.connect(func() -> void:
+		quit_game_requested.emit()
+	)
+
+
+func _build_delivery_briefing_dialog(screen: Control) -> void:
+	_briefing_overlay = ColorRect.new()
+	_briefing_overlay.name = "DeliveryBriefingOverlay"
+	_briefing_overlay.color = Color(0.015, 0.03, 0.06, 0.94)
+	_briefing_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_briefing_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	_briefing_overlay.visible = false
+	screen.add_child(_briefing_overlay)
+
+	var modal: PanelContainer = _panel(_briefing_overlay, Rect2(-450.0, -290.0, 900.0, 580.0), Vector2(0.5, 0.5))
+	modal.mouse_filter = Control.MOUSE_FILTER_STOP
+	var rows: VBoxContainer = _rows(modal, 12)
+	rows.alignment = BoxContainer.ALIGNMENT_CENTER
+
+	var title: Label = _label(rows, "MANUAL DEL REPARTIDOR · TURNO NOCTURNO", 24, ORANGE)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var subtitle: Label = _label(rows, "Ramos Mejía · 15 minutos contrarreloj para maximizar tu billetera", 13, CYAN)
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	var text_panel: PanelContainer = PanelContainer.new()
+	var tp_style: StyleBoxFlat = StyleBoxFlat.new()
+	tp_style.bg_color = Color(0.04, 0.08, 0.12, 0.82)
+	tp_style.set_corner_radius_all(6)
+	tp_style.set_content_margin_all(14.0)
+	text_panel.add_theme_stylebox_override("panel", tp_style)
+	rows.add_child(text_panel)
+
+	var briefing_content: Label = _label(text_panel,
+		"🛵 PUNTO DE SALIDA FIJO:\n" +
+		"   Comenzás siempre en la emblemática «Tanga de Ramos» (Av. de Mayo y Rivadavia).\n\n" +
+		"⏱️ TURNO DE 15 MINUTOS:\n" +
+		"   Tenés exactamente 15:00 min para realizar todas las entregas que puedas antes de que cierre la noche.\n\n" +
+		"🍔 3 OPCIONES DE PEDIDOS Y COMPROMISO:\n" +
+		"   Elegí entre 3 órdenes gastronómicas de locales reales de Ramos. Una vez aceptado un pedido debés completarlo: ¡no se puede cancelar ni cambiar de pedido en curso!\n\n" +
+		"💰 PROPINAS DINÁMICAS (PAR):\n" +
+		"   El tiempo de entrega corre desde que el pedido está listo en cocina. Llegar a tiempo garantiza propina máxima; llegar tarde decae la propina progresivamente.\n\n" +
+		"🚗 CUIDADO CON EL TRÁFICO Y MULTAS POR CHOQUE:\n" +
+		"   Chocar autos estacionados o en movimiento descuenta plata de tu billetera según el impacto (desde rayones leves hasta destrucción total).\n\n" +
+		"🚫 REGLAS ESTRICTAS DE COMPETENCIA:\n" +
+		"   El teletransporte [TAB] y los atajos rápidos están totalmente deshabilitados en este modo competitivo. Al finalizar el turno podrás guardar tu puntaje en el podio de récords.",
+		12, PAPER
+	)
+	briefing_content.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+
+	var btn_row: HBoxContainer = HBoxContainer.new()
+	btn_row.add_theme_constant_override("separation", 20)
+	rows.add_child(btn_row)
+
+	var start_btn: Button = _button(btn_row, "COMENZAR TURNO [ENTER]")
+	start_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	start_btn.pressed.connect(func() -> void:
+		close_delivery_briefing_dialog()
+		game_mode_chosen.emit(1)
+	)
+
+	var back_btn: Button = _button(btn_row, "VOLVER AL MENÚ [ESC]")
+	back_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	back_btn.pressed.connect(func() -> void:
+		close_delivery_briefing_dialog()
+		show_mode_selection_dialog()
+	)
+
+
+func _build_options_dialog(screen: Control) -> void:
+	_options_overlay = ColorRect.new()
+	_options_overlay.name = "OptionsOverlay"
+	_options_overlay.color = Color(0.015, 0.03, 0.06, 0.94)
+	_options_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_options_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	_options_overlay.visible = false
+	screen.add_child(_options_overlay)
+
+	var modal: PanelContainer = _panel(_options_overlay, Rect2(-370.0, -260.0, 740.0, 520.0), Vector2(0.5, 0.5))
+	modal.mouse_filter = Control.MOUSE_FILTER_STOP
+	var rows: VBoxContainer = _rows(modal, 14)
+	rows.alignment = BoxContainer.ALIGNMENT_CENTER
+
+	var title: Label = _label(rows, "CONFIGURACIÓN Y OPCIONES", 24, PAPER)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var subtitle: Label = _label(rows, "Ajustá gráficos, pantalla y volumen", 13, CYAN)
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	var form: VBoxContainer = _rows(rows, 12)
+
+	# 1. Fullscreen
+	var fs_row: HBoxContainer = HBoxContainer.new()
+	_label(fs_row, "Pantalla Completa:", 14, PAPER)
+	_fullscreen_check = CheckBox.new()
+	_fullscreen_check.text = "Activar pantalla completa"
+	_fullscreen_check.button_pressed = bool(_settings_data.get("fullscreen", false))
+	fs_row.add_child(_fullscreen_check)
+	form.add_child(fs_row)
+
+	# 2. Shadows
+	var sh_row: HBoxContainer = HBoxContainer.new()
+	_label(sh_row, "Sombras Dinámicas:", 14, PAPER)
+	_shadows_check = CheckBox.new()
+	_shadows_check.text = "Activar sombras (desactivar si titila o para mayor FPS)"
+	_shadows_check.button_pressed = bool(_settings_data.get("shadows", true))
+	sh_row.add_child(_shadows_check)
+	form.add_child(sh_row)
+
+	# 3. Traffic density
+	var tr_row: HBoxContainer = HBoxContainer.new()
+	_label(tr_row, "Densidad de Tráfico:", 14, PAPER)
+	_traffic_option = OptionButton.new()
+	_traffic_option.add_item("Baja (Tráfico ligero ~12 autos)", 0)
+	_traffic_option.add_item("Normal (Tráfico estándar ~24 autos)", 1)
+	_traffic_option.add_item("Alta (Hora pico céntrica ~36 autos)", 2)
+	_traffic_option.selected = int(_settings_data.get("traffic_density", 1))
+	tr_row.add_child(_traffic_option)
+	form.add_child(tr_row)
+
+	# 4. Master volume
+	var mv_row: HBoxContainer = HBoxContainer.new()
+	var mv_lbl: Label = _label(mv_row, "Volumen General: %d%%" % roundi(float(_settings_data.get("master_volume", 1.0)) * 100.0), 13, PAPER)
+	mv_lbl.custom_minimum_size = Vector2(210, 0)
+	_master_vol_slider = HSlider.new()
+	_master_vol_slider.min_value = 0.0
+	_master_vol_slider.max_value = 1.0
+	_master_vol_slider.step = 0.05
+	_master_vol_slider.value = float(_settings_data.get("master_volume", 1.0))
+	_master_vol_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_master_vol_slider.value_changed.connect(func(val: float) -> void:
+		mv_lbl.text = "Volumen General: %d%%" % roundi(val * 100.0)
+	)
+	mv_row.add_child(_master_vol_slider)
+	form.add_child(mv_row)
+
+	# 5. SFX volume
+	var sfx_row: HBoxContainer = HBoxContainer.new()
+	var sfx_lbl: Label = _label(sfx_row, "Efectos / Moto (SFX): %d%%" % roundi(float(_settings_data.get("sfx_volume", 1.0)) * 100.0), 13, PAPER)
+	sfx_lbl.custom_minimum_size = Vector2(210, 0)
+	_sfx_vol_slider = HSlider.new()
+	_sfx_vol_slider.min_value = 0.0
+	_sfx_vol_slider.max_value = 1.0
+	_sfx_vol_slider.step = 0.05
+	_sfx_vol_slider.value = float(_settings_data.get("sfx_volume", 1.0))
+	_sfx_vol_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_sfx_vol_slider.value_changed.connect(func(val: float) -> void:
+		sfx_lbl.text = "Efectos / Moto (SFX): %d%%" % roundi(val * 100.0)
+	)
+	sfx_row.add_child(_sfx_vol_slider)
+	form.add_child(sfx_row)
+
+	# 6. Ambience volume
+	var amb_row: HBoxContainer = HBoxContainer.new()
+	var amb_lbl: Label = _label(amb_row, "Ambiente / Ciudad: %d%%" % roundi(float(_settings_data.get("music_volume", 0.8)) * 100.0), 13, PAPER)
+	amb_lbl.custom_minimum_size = Vector2(210, 0)
+	_music_vol_slider = HSlider.new()
+	_music_vol_slider.min_value = 0.0
+	_music_vol_slider.max_value = 1.0
+	_music_vol_slider.step = 0.05
+	_music_vol_slider.value = float(_settings_data.get("music_volume", 0.8))
+	_music_vol_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_music_vol_slider.value_changed.connect(func(val: float) -> void:
+		amb_lbl.text = "Ambiente / Ciudad: %d%%" % roundi(val * 100.0)
+	)
+	amb_row.add_child(_music_vol_slider)
+	form.add_child(amb_row)
+
+	var btn_box: HBoxContainer = HBoxContainer.new()
+	btn_box.add_theme_constant_override("separation", 20)
+	rows.add_child(btn_box)
+
+	var save_btn: Button = _button(btn_box, "GUARDAR Y APLICAR [ESC]")
+	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	save_btn.pressed.connect(func() -> void:
+		_save_and_close_options()
+	)
+
+
+func _save_and_close_options() -> void:
+	if is_instance_valid(_fullscreen_check):
+		_settings_data["fullscreen"] = _fullscreen_check.button_pressed
+	if is_instance_valid(_shadows_check):
+		_settings_data["shadows"] = _shadows_check.button_pressed
+	if is_instance_valid(_traffic_option):
+		_settings_data["traffic_density"] = _traffic_option.selected
+	if is_instance_valid(_master_vol_slider):
+		_settings_data["master_volume"] = _master_vol_slider.value
+	if is_instance_valid(_sfx_vol_slider):
+		_settings_data["sfx_volume"] = _sfx_vol_slider.value
+	if is_instance_valid(_music_vol_slider):
+		_settings_data["music_volume"] = _music_vol_slider.value
+	save_settings(_settings_data)
+	close_options_dialog()
+	options_saved.emit(_settings_data)
+	if _was_options_from_pause:
+		_was_options_from_pause = false
+		_pause_overlay.show()
+	else:
+		show_mode_selection_dialog()
 
 
 func _build_start_location_dialog(screen: Control) -> void:
@@ -936,21 +1343,25 @@ func _rebuild_order_cards() -> void:
 func _build_shift_summary_dialog(screen: Control) -> void:
 	_summary_overlay = ColorRect.new()
 	_summary_overlay.name = "ShiftSummaryOverlay"
-	_summary_overlay.color = Color(0.02, 0.04, 0.07, 0.94)
+	_summary_overlay.color = Color(0.015, 0.03, 0.06, 0.95)
 	_summary_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_summary_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	_summary_overlay.visible = false
 	screen.add_child(_summary_overlay)
 
-	var modal: PanelContainer = _panel(_summary_overlay, Rect2(-350.0, -210.0, 700.0, 420.0), Vector2(0.5, 0.5))
+	var modal: PanelContainer = _panel(_summary_overlay, Rect2(-380.0, -280.0, 760.0, 560.0), Vector2(0.5, 0.5))
 	modal.mouse_filter = Control.MOUSE_FILTER_STOP
-	var rows: VBoxContainer = _rows(modal, 14)
+	var rows: VBoxContainer = _rows(modal, 12)
 	rows.alignment = BoxContainer.ALIGNMENT_CENTER
 
-	var t1: Label = _label(rows, "¡FIN DE LA JORNADA NOCTURNA!", 26, PAPER)
+	var t1: Label = _label(rows, "¡FIN DEL TURNO NOCTURNO!", 24, PAPER)
 	t1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var t2: Label = _label(rows, "Completaste 10 minutos de repartos por las calles de Ramos Mejía.", 13, CYAN)
+	var t2: Label = _label(rows, "Completaste 15 minutos de repartos por las calles de Ramos Mejía.", 13, CYAN)
 	t2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	_summary_record_badge = _label(rows, "🏆 ¡NUEVO RÉCORD HISTÓRICO EN RAMOS MEJÍA! 🏆", 14, ORANGE)
+	_summary_record_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_summary_record_badge.visible = false
 
 	var stats_box: HBoxContainer = HBoxContainer.new()
 	stats_box.add_theme_constant_override("separation", 10)
@@ -984,14 +1395,42 @@ func _build_shift_summary_dialog(screen: Control) -> void:
 	_summary_fines_label = _label(fr, "-$ 0", 20, Color("ff6352"))
 	stats_box.add_child(fc)
 
-	var restart_btn: Button = _button(rows, "INICIAR NUEVA NOCHE [R]")
+	var hs_panel: PanelContainer = PanelContainer.new()
+	var hs_style: StyleBoxFlat = StyleBoxFlat.new()
+	hs_style.bg_color = Color(0.04, 0.08, 0.12, 0.85)
+	hs_style.set_corner_radius_all(6)
+	hs_style.set_content_margin_all(10.0)
+	hs_panel.add_theme_stylebox_override("panel", hs_style)
+	rows.add_child(hs_panel)
+
+	var hs_inner: VBoxContainer = VBoxContainer.new()
+	hs_inner.add_theme_constant_override("separation", 4)
+	hs_panel.add_child(hs_inner)
+
+	var hs_title: Label = _label(hs_inner, "TABLA DE RÉCORDS HISTÓRICOS (TOP 5)", 13, CYAN)
+	hs_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	_summary_highscores_vbox = VBoxContainer.new()
+	_summary_highscores_vbox.add_theme_constant_override("separation", 3)
+	hs_inner.add_child(_summary_highscores_vbox)
+
+	var btn_box: HBoxContainer = HBoxContainer.new()
+	btn_box.add_theme_constant_override("separation", 16)
+	rows.add_child(btn_box)
+
+	var restart_btn: Button = _button(btn_box, "INICIAR NUEVO TURNO [ENTER]")
+	restart_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	restart_btn.pressed.connect(func() -> void:
 		close_shift_summary()
 		shift_restart_requested.emit()
 	)
 
-	var hint: Label = _label(rows, "Presioná [R] o [ENTER] para volver a jugar.", 12, MUTED)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var menu_btn: Button = _button(btn_box, "MENÚ PRINCIPAL [ESC]")
+	menu_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	menu_btn.pressed.connect(func() -> void:
+		close_shift_summary()
+		return_to_main_menu_requested.emit()
+	)
 
 
 func _panel(parent: Control, rectangle: Rect2, anchor: Vector2 = Vector2.ZERO) -> PanelContainer:

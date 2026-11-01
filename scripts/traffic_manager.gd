@@ -15,9 +15,18 @@ var lane_connections: Dictionary = {}
 var active_vehicles: Array = []
 
 var target_vehicle_count: int = 24
+var density_factor: float = 1.0
 var max_distance_from_player: float = 145.0
 var min_spawn_distance: float = 45.0
 var max_spawn_distance: float = 125.0
+
+func set_traffic_density(level: int) -> void:
+	match level:
+		0: density_factor = 0.5
+		1: density_factor = 1.0
+		2: density_factor = 1.5
+		_: density_factor = 1.0
+
 
 var _spawn_timer: float = 0.0
 var _car_types: Array = ["sedan", "sedan", "suv", "compact"]
@@ -140,7 +149,7 @@ func _seed_initial_traffic() -> void:
 		return
 	var player_pos: Vector3 = bike.global_position
 	var in_downtown: bool = is_player_in_downtown(player_pos)
-	target_vehicle_count = 38 if in_downtown else 24
+	target_vehicle_count = roundi((38 if in_downtown else 24) * density_factor)
 
 	var seeded: int = 0
 	var attempts: int = 0
@@ -160,7 +169,7 @@ func _physics_process(delta: float) -> void:
 
 	var player_pos: Vector3 = bike.global_position
 	var in_downtown: bool = is_player_in_downtown(player_pos)
-	target_vehicle_count = 38 if in_downtown else 24
+	target_vehicle_count = roundi((38 if in_downtown else 24) * density_factor)
 
 	# 1. Cull far vehicles outside active bubble
 	var i: int = active_vehicles.size() - 1
