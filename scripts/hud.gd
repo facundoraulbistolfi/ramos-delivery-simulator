@@ -24,7 +24,7 @@ const GREEN: Color = Color("28e070")
 const GOLD: Color = Color("ffd700")
 const MAGENTA: Color = Color("d855ff")
 const RED_ALERT: Color = Color("ff4838")
-const GAME_VERSION: String = "alpha-0.0.2"
+const GAME_VERSION: String = "alpha-0.0.3"
 
 var _order_panel: PanelContainer
 var _status_panel: PanelContainer

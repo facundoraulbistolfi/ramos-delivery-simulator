@@ -5,15 +5,31 @@ Cada agente que tome o finalice una tarea debe actualizar el estado correspondie
 
 ---
 
-## 📌 Hito Actual: Sprint `alpha-0.0.2` (En Desarrollo)
+## 📌 Hito Actual: Sprint `alpha-0.0.3` (En Desarrollo)
 
-- **Rama activa:** `feat/alpha-0.0.2`
+- **Rama activa:** `feat/alpha-0.0.3`
 - **Estado general:** En curso. Incorporando nuevas características y mejoras según prioridades del usuario.
-- **Versión base cerrada:** [`alpha-0.0.1`](https://github.com/facundoraulbistolfi/ramos-delivery-simulator/releases/tag/alpha-0.0.1) *(Release publicada y descargable).*
+- **Versión base cerrada:** [`alpha-0.0.2`](https://github.com/facundoraulbistolfi/ramos-delivery-simulator/releases/tag/alpha-0.0.2) *(Release publicada y descargable).*
 
 ---
 
-## 🚀 Tareas del Sprint `alpha-0.0.2` (En Curso)
+## 🚀 Tareas del Sprint `alpha-0.0.3` (En Curso / Backlog)
+
+1. **Audio y Ambientación Sonora:**
+   - [ ] Motor de la moto según aceleración/velocidad con modulación de pitch y RPM.
+   - [ ] Efectos de sonido (SFX): aceleración, derrapes, frenado, choque metálico contra autos, bocina y caja térmica.
+   - [ ] Ambiente nocturno urbano y cruce ferroviario.
+2. **Peatones en Veredas y Cruces:**
+   - [ ] Transeúntes caminando por veredas en corredores comerciales (Av. de Mayo y Rivadavia).
+   - [ ] Cruce en sendas peatonales con detención/reacción de vehículos.
+3. **Clima Dinámico / Lluvia:**
+   - [ ] Alternancia entre noche despejada y lluvia nocturna con asfalto reflectante y adherencia reducida.
+4. **Motos & Personalización:**
+   - [ ] Modelos adicionales de moto o casco y selección estética.
+
+---
+
+## ✅ Funcionalidades Completadas y Validadas (alpha-0.0.2)
 
 - [x] **Arquitectura de Capas Urbanas, Veredas Anulares y Contención de Manzanas:**
   - Partición booleana estricta: `Layer_Vias`, `Layer_Calles`, `Layer_Veredas`, `Layer_Lotes`, `Layer_Edificios`, `Layer_Mobiliario`.
@@ -69,13 +85,7 @@ Cada agente que tome o finalice una tarea debe actualizar el estado correspondie
   - **Medidor de Aura (`0–1000`)** con 5 rangos callejeros en HUD, banner de acrobacias en tiempo real y multiplicador de **Puntaje Final** de `x1.00` a `x2.00` (`+100%`) registrado en el podio de récords.
   - *Referencia:* [ADR-0011: Sistema de Acrobacias en Moto Estilo GTA, Medidor de Aura y Multiplicador de Puntaje Final](adr/0011-sistema-acrobacias-moto-y-bonificador-aura.md).
 
----
 
-## 📌 Próximas Tareas del Backlog para Continuar el Sprint:
-1. **Audio y SFX:** Motor de la moto según aceleración/velocidad, bocina, choques y ambiente urbano.
-2. **Peatones en Veredas:** Transeúntes caminando por veredas comerciales y cruces peatonales.
-3. **Clima Dinámico:** Alternancia nocturna con lluvia, charcos y reflejos en asfalto.
-4. **Motos & Personalización:** Modelos adicionales de moto o casco.
 
 ---
 
