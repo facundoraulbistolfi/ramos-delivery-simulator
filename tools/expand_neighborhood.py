@@ -26,12 +26,64 @@ def width_for(tags):
         except ValueError:pass
     lanes=int(tags.get('lanes','2').split(';')[0])
     name=tags.get('name','')
+    hwy=tags.get('highway','')
     if 'Rivadavia' in name:
         return (8.5 if tags.get('oneway')=='yes' else (18.0 if lanes>=4 else 13.0)),'estimated lanes + kerb space'
     if name=='Avenida de Mayo':
         return (15.0 if tags.get('parking:left:orientation')=='diagonal' else (18.0 if lanes>=4 else 13.0)),'estimated lanes + parking'
-    if tags.get('highway')=='service':return 5.0,'estimated service road'
-    return max(9.0,lanes*3.25+4.0),'estimated lanes + parking'
+    if hwy=='service':return 5.0,'estimated service road'
+    if hwy in ['primary', 'primary_link']:
+        return (16.0 if lanes>=4 else 13.0),'primary carriageway'
+    if hwy in ['secondary', 'secondary_link']:
+        return (11.5 if lanes>=3 else 10.0),'secondary carriageway'
+    if hwy in ['tertiary', 'tertiary_link']:
+        return (10.0 if lanes>=3 else 9.0),'tertiary carriageway'
+    return (8.5 if lanes<=2 else max(8.5, lanes*3.0 + 2.5)),'residential carriageway'
+
+def triangulate_polygon_2d(pts):
+    if len(pts) < 3: return []
+    if len(pts) == 3: return [pts]
+    poly = [list(p) for p in pts]
+    area2 = sum(poly[i][0] * poly[(i + 1) % len(poly)][1] - poly[(i + 1) % len(poly)][0] * poly[i][1] for i in range(len(poly)))
+    if area2 < 0: poly.reverse()
+    def is_convex(p0, p1, p2):
+        return (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]) > 1e-7
+    def pt_in_tri(p, a, b, c):
+        def sign(p1, p2, p3):
+            return (p1[0] - p3[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p3[1])
+        d1 = sign(p, a, b)
+        d2 = sign(p, b, c)
+        d3 = sign(p, c, a)
+        return not (((d1 < -1e-6) or (d2 < -1e-6) or (d3 < -1e-6)) and ((d1 > 1e-6) or (d2 > 1e-6) or (d3 > 1e-6)))
+    tris = []
+    n = len(poly)
+    indices = list(range(n))
+    limit = n * n * 2
+    steps = 0
+    while len(indices) > 2 and steps < limit:
+        steps += 1
+        ear_found = False
+        m = len(indices)
+        for i in range(m):
+            prev_i = indices[(i - 1 + m) % m]
+            curr_i = indices[i]
+            next_i = indices[(i + 1) % m]
+            p0, p1, p2 = poly[prev_i], poly[curr_i], poly[next_i]
+            if not is_convex(p0, p1, p2): continue
+            inside = False
+            for j in range(m):
+                if j in ((i - 1 + m) % m, i, (i + 1) % m): continue
+                if pt_in_tri(poly[indices[j]], p0, p1, p2):
+                    inside = True; break
+            if not inside:
+                tris.append([p0, p1, p2])
+                indices.pop(i)
+                ear_found = True; break
+        if not ear_found:
+            p0, p1, p2 = poly[indices[0]], poly[indices[1]], poly[indices[2]]
+            tris.append([p0, p1, p2])
+            indices.pop(1)
+    return tris
 
 def parts(geometry):
     if geometry.is_empty:return []
@@ -318,12 +370,93 @@ def expand(data,ways,pts):
         else:
             clean_landmarks.append(lm)
     data['landmarks'] = clean_landmarks
-    for key,geometry in [('pavement_triangles',road_polygons),('sidewalk_triangles',road_polygons.buffer(3.5,join_style=2).difference(road_polygons))]:
-        p_buf=geometry.buffer(0.02)
-        shapely.prepare(geometry)
-        shapely.prepare(p_buf)
-        data[key]=[list(t.exterior.coords)[:-1] for p in parts(geometry) if p.geom_type=='Polygon' for t in triangulate(p) if geometry.covers(t.representative_point()) and p_buf.covers(t)]
     density_plan=plan_blocks(data,ways,pts,selected,area,road_polygons,hospital_campus,plaza)
+
+    # LAYER 2 & 3: Blocks (Cuadras), Veredas (Sidewalks) & Curbs
+    blocks = []
+    sidewalk_polygons = []
+    curb_lines = []
+    rail_corridor = unary_union([LineString(r['points']).buffer(8.0, cap_style=2, join_style=2) for r in data['railways']])
+
+    for face in selected:
+        block_clean = face.difference(road_polygons).difference(rail_corridor)
+        for cp in parts(block_clean):
+            if cp.geom_type != 'Polygon' or cp.area < 25.0:
+                continue
+
+            # Contact curb line against road carriageway
+            c_boundary = cp.boundary.intersection(road_polygons.buffer(0.35, join_style=2))
+            for cline in parts(c_boundary):
+                if cline.geom_type == 'LineString' and cline.length > 0.8:
+                    simp = cline.simplify(0.2, preserve_topology=False)
+                    curb_lines.append([[round(x, 2), round(y, 2)] for x, y in simp.coords])
+
+            # Sidewalk width: 3.5m on avenue corridor, 3.2m elsewhere, adapted for small islands
+            sw = 3.5 if cp.distance(route) < 30.0 else 3.2
+            if cp.area < 450.0:
+                sw = max(1.8, min(sw, math.sqrt(cp.area) * 0.16))
+
+            mun_poly = cp.buffer(-sw, join_style=2)
+            if mun_poly.is_empty or mun_poly.area < 25.0:
+                for sp in simple_polygons(cp):
+                    if sp.area >= 2.0:
+                        sidewalk_polygons.append([[round(x, 2), round(y, 2)] for x, y in sp.exterior.coords][:-1])
+            else:
+                sidewalk_ring = cp.difference(mun_poly)
+                for sp in simple_polygons(sidewalk_ring):
+                    if sp.area >= 2.0:
+                        sidewalk_polygons.append([[round(x, 2), round(y, 2)] for x, y in sp.exterior.coords][:-1])
+
+            mun_parts = [p for p in parts(mun_poly) if p.geom_type == 'Polygon' and p.area >= 10.0]
+            mun_coords = [list(mp.exterior.coords)[:-1] for mp in mun_parts]
+            blocks.append({
+                'id': len(blocks),
+                'curb_points': [[round(x, 2), round(y, 2)] for x, y in cp.exterior.coords][:-1],
+                'municipal_points': [[round(x, 2), round(y, 2)] for x, y in mun_coords[0]] if mun_coords else [],
+                'all_municipal_parts': [[[round(x, 2), round(y, 2)] for x, y in c] for c in mun_coords],
+                'area': round(cp.area, 1)
+            })
+
+    data['blocks'] = blocks
+    data['sidewalk_polygons'] = sidewalk_polygons
+    data['curb_lines'] = curb_lines
+
+    # Exact ear-clipped sidewalk triangles (no Delaunay spilling into intersections)
+    sidewalk_triangles = []
+    for poly_pts in sidewalk_polygons:
+        for tri in triangulate_polygon_2d(poly_pts):
+            sidewalk_triangles.append([[round(x, 2), round(y, 2)] for x, y in tri])
+    data['sidewalk_triangles'] = sidewalk_triangles
+
+    # Road pavement triangles
+    p_buf = road_polygons.buffer(0.02)
+    shapely.prepare(road_polygons)
+    shapely.prepare(p_buf)
+    data['pavement_triangles'] = [list(t.exterior.coords)[:-1] for p in parts(road_polygons) if p.geom_type == 'Polygon' for t in triangulate(p) if road_polygons.covers(t.representative_point()) and p_buf.covers(t)]
+
+    # Clip mapped OSM buildings strictly to municipal interior (private blocks)
+    clean_buildings = []
+    for b in data['buildings']:
+        osm_id = int(b.get('osm_id', 0))
+        rec = str(b.get('recognizable', ''))
+        poly = Polygon(b['points']).buffer(0)
+        if rec != '' or osm_id in [636863311, 27233077, 475920381] or hospital_campus.intersects(poly):
+            diff = poly.difference(road_polygons.buffer(0.2, join_style=2))
+            if not diff.is_empty and diff.area >= 10.0:
+                p_largest = max(parts(diff), key=lambda g: g.area)
+                b['points'] = [[round(x, 2), round(y, 2)] for x, y in p_largest.exterior.coords][:-1]
+                clean_buildings.append(b)
+        else:
+            b_clean = poly.intersection(density_plan['private'].buffer(0.05, join_style=2))
+            if not b_clean.is_empty and b_clean.area >= 12.0:
+                for sp in simple_polygons(b_clean):
+                    if sp.area >= 12.0:
+                        b_copy = dict(b)
+                        b_copy['points'] = [[round(x, 2), round(y, 2)] for x, y in sp.exterior.coords][:-1]
+                        clean_buildings.append(b_copy)
+    data['buildings'] = clean_buildings
+    buildings = clean_buildings
+
     occupied=[Polygon(b['points']).buffer(1.5,join_style=2) for b in buildings]
     occupied.append(density_plan['reserved'])
     occupied.append(hospital_campus)

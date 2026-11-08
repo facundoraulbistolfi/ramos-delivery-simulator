@@ -53,6 +53,9 @@ func _ready() -> void:
 	hud.return_to_main_menu_requested.connect(_return_to_main_menu)
 	hud.quit_game_requested.connect(func() -> void: get_tree().quit())
 	bike.vehicle_crashed.connect(_on_bike_vehicle_crashed)
+	bike.stunt_live_updated.connect(hud.update_stunt_live)
+	bike.stunt_landed.connect(_on_bike_stunt_landed)
+	bike.stunt_wiped_out.connect(_on_bike_stunt_wiped_out)
 
 	var initial_settings: Dictionary = hud.load_settings()
 	_apply_settings(initial_settings)
@@ -184,8 +187,27 @@ func _on_switch_mode_requested() -> void:
 	hud.show_mode_selection_dialog()
 
 func _on_bike_vehicle_crashed(impact_kmh: float, _collider: Object) -> void:
+	if is_instance_valid(camera):
+		camera.add_trauma(clampf(impact_kmh / 70.0, 0.25, 0.75))
 	if current_game_mode == GameMode.DELIVERY and mission_system != null:
 		mission_system.apply_crash_penalty(impact_kmh)
+
+func _on_bike_stunt_landed(stunt_name: String, detail_text: String, aura_gained: int, combo_count: int) -> void:
+	if mission_system != null:
+		mission_system.add_aura(aura_gained, stunt_name)
+	if is_instance_valid(camera):
+		camera.add_trauma(0.18)
+	if is_instance_valid(hud):
+		hud.show_stunt_completed(stunt_name, detail_text, aura_gained, combo_count)
+
+func _on_bike_stunt_wiped_out(reason: String, aura_penalty: int) -> void:
+	var actual_lost: int = 0
+	if mission_system != null:
+		actual_lost = mission_system.lose_aura(aura_penalty, reason)
+	if is_instance_valid(camera):
+		camera.add_trauma(0.85)
+	if is_instance_valid(hud):
+		hud.show_stunt_wipeout(reason, actual_lost)
 
 func _on_hud_overlay_state_changed(is_blocking_drive: bool) -> void:
 	if is_in_main_menu:
@@ -249,6 +271,8 @@ func _setup_inputs() -> void:
 	_bind("steer_right",[KEY_D,KEY_RIGHT])
 	_bind("boost",[KEY_SHIFT])
 	_bind("drift",[KEY_SPACE])
+	_bind("stunt_wheelie",[KEY_Q,KEY_CTRL,KEY_Z])
+	_bind("stunt_stoppie",[KEY_E,KEY_X])
 	_bind("reset",[KEY_R])
 	_bind("camera",[KEY_C])
 	_bind("pause",[KEY_ESCAPE])

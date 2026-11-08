@@ -302,6 +302,7 @@ radial_segments = 12
 rings = 4
 
 [node name="Moto" type="CharacterBody3D"]
+collision_mask = 3
 floor_snap_length = 0.35
 script = ExtResource("1_bike")
 

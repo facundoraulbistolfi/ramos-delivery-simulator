@@ -51,68 +51,26 @@ func generate(builder: SceneTree) -> void:
 	for triangle: Array in data["pavement_triangles"]:
 		_triangle(triangle, 0.016, "road")
 
-	# 2. Continuous sidewalk network along all streets with vertical curbs
-	for road: Dictionary in data["roads"] + data["streets"]:
-		if bool(road.get("bridge", false)):
-			continue
-		var r_pts: Array = road["points"]
-		var r_w: float = float(road["width"])
-		var half_w: float = r_w * 0.5
-		var sw_w: float = 3.5
-		for i: int in range(r_pts.size() - 1):
-			var ra: Vector3 = b._v(r_pts[i])
-			var rb: Vector3 = b._v(r_pts[i + 1])
-			var seg_len: float = ra.distance_to(rb)
-			if seg_len < 0.5:
-				continue
-			var dir: Vector3 = (rb - ra).normalized()
-			var right: Vector3 = dir.cross(Vector3.UP)
-			for side: float in [-1.0, 1.0]:
-				var curb_pos0: Vector3 = ra + right * (side * half_w)
-				var curb_pos1: Vector3 = rb + right * (side * half_w)
-				var sw_pos0: Vector3 = ra + right * (side * (half_w + sw_w * 0.5))
-				var sw_pos1: Vector3 = rb + right * (side * (half_w + sw_w * 0.5))
-				
-				# Pull segment endpoints back if entering intersecting street carriageway
-				var p0: Vector3 = sw_pos0
-				var p1: Vector3 = sw_pos1
-				var c0: Vector3 = curb_pos0
-				var c1: Vector3 = curb_pos1
-				var pull_amt: float = minf(seg_len * 0.35, half_w + 1.2)
-				if b.map.get_road_distance(p0) < 0.6:
-					p0 += dir * pull_amt
-					c0 += dir * pull_amt
-				if b.map.get_road_distance(p1) < 0.6:
-					p1 -= dir * pull_amt
-					c1 -= dir * pull_amt
-				
-				var mid_test: Vector3 = (p0 + p1) * 0.5
-				if p0.distance_to(p1) >= 1.2 and b.map.get_road_distance(mid_test) > 1.2 and b.map.get_road_distance(p0) > 0.0 and b.map.get_road_distance(p1) > 0.0:
-					if side > 0.0:
-						b._quad(
-							Vector3(c0.x, 0.016, c0.z),
-							Vector3(c1.x, 0.016, c1.z),
-							Vector3(c1.x, 0.17, c1.z),
-							Vector3(c0.x, 0.17, c0.z),
-							"curb",
-							0.40
-						)
-					else:
-						b._quad(
-							Vector3(c1.x, 0.016, c1.z),
-							Vector3(c0.x, 0.016, c0.z),
-							Vector3(c0.x, 0.17, c0.z),
-							Vector3(c1.x, 0.17, c1.z),
-							"curb",
-							0.40
-						)
-					b._strip(Vector3(p0.x, 0.17, p0.z), Vector3(p1.x, 0.17, p1.z), sw_w, "walk", 0.50)
-
-	# Additional sidewalk triangles for plazas and corners outside road carriageways
-	for triangle: Array in data["sidewalk_triangles"]:
-		var tri_mid: Vector3 = (b._v(triangle[0]) + b._v(triangle[1]) + b._v(triangle[2])) / 3.0
-		if b.map.get_road_distance(tri_mid) > 0.3:
+	# 2. Continuous layer-based sidewalks (Layer_Veredas) and vertical curbs
+	if data.has("sidewalk_polygons"):
+		for poly_pts: Array in data["sidewalk_polygons"]:
+			b._polygon(poly_pts, 0.0, "walk", 0.17)
+	elif data.has("sidewalk_triangles"):
+		for triangle: Array in data["sidewalk_triangles"]:
 			_triangle(triangle, 0.17, "walk")
+
+	for line: Array in data.get("curb_lines", []):
+		for i: int in range(line.size() - 1):
+			var p0: Vector3 = b._v(line[i], 0.016)
+			var p1: Vector3 = b._v(line[i + 1], 0.016)
+			b._quad(
+				Vector3(p0.x, 0.016, p0.z),
+				Vector3(p1.x, 0.016, p1.z),
+				Vector3(p1.x, 0.17, p1.z),
+				Vector3(p0.x, 0.17, p0.z),
+				"curb",
+				0.40
+			)
 	for road: Dictionary in data["roads"] + data["streets"]:
 		if not bool(road.get("bridge", false)):
 			_markings(road)

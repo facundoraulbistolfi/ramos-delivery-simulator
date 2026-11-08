@@ -161,7 +161,8 @@ def main():
     base_keys = [
         'name', 'attribution', 'source_url', 'retrieved', 'projection', 'endpoints',
         'route', 'roads', 'sections', 'crossings', 'streets', 'pavement',
-        'pavement_triangles', 'sidewalk_triangles', 'railways', 'railway_crossings',
+        'pavement_triangles', 'sidewalk_triangles', 'sidewalk_polygons', 'curb_lines',
+        'blocks', 'railways', 'railway_crossings',
         'railway_walls', 'detailed_plazas', 'landmarks', 'lots', 'houses',
         'buildings', 'generated_buildings', 'ramos_boundary', 'boundary_wall',
         'coverage', 'block_density', 'open_passages', 'property_walls',

@@ -187,22 +187,24 @@ func _coto() -> void:
 		# Illuminated interior ceiling visible through ground-floor storefront glass
 		_box(frame, Vector3(0, 2.85, 0.02), Vector3(width - 1.2, 0.12, 0.06), "lamp_glow")
 		_box(frame, Vector3(0, 1.80, 0.07), Vector3(width - 0.5, 3.05, 0.10), "glass")
-		_text(frame, Vector3(-width * 0.18, 4.98, 0.22), "COTO", 1.75, "coto_red", false, true)
-		_text(frame, Vector3(width * 0.15, 4.72, 0.22), "Yo te conozco", 0.46, "coto_red")
+		_text(frame, Vector3(-width * 0.18, 4.98, 0.25), "COTO", 1.75, "coto_red", false, true)
+		_text(frame, Vector3(width * 0.15, 4.72, 0.25), "Yo te conozco", 0.46, "coto_red")
 		for x: int in range(1, floori(width / 3.0)):
 			_box(frame, Vector3(-width * 0.5 + float(x) * 3.0, 1.85, 0.16), Vector3(0.14, 3.15, 0.16), "silver_metal")
 		_box(frame, Vector3(0, 6.32, -0.18), Vector3(width + 0.4, 0.30, 0.85), "shop_white")
 
 	# Main Rivadavia entrance portal (matching Coto reference photo)
-	var main: Transform3D = _frame(site["front"])
-	_box(main, Vector3(-18, 1.65, 0.24), Vector3(6.2, 3.2, 0.20), "silver_metal")
-	_box(main, Vector3(-18, 2.95, 0.36), Vector3(5.8, 0.55, 0.22), "coto_blue")
-	_box(main, Vector3(-18, 1.40, 0.34), Vector3(4.8, 2.55, 0.12), "glass")
-	_text(main, Vector3(-18, 2.96, 0.49), "COTO · ENTRADA", 0.36, "coto_yellow", false, true)
+	var riv_front: Dictionary = site["side"] if float(site["side"]["normal"][1]) < -0.7 else site["front"]
+	var puey_front: Dictionary = site["front"] if float(site["front"]["normal"][0]) < -0.7 else site["side"]
+	var main: Transform3D = _frame(riv_front)
+	_box(main, Vector3(-12, 1.65, 0.24), Vector3(6.2, 3.2, 0.20), "silver_metal")
+	_box(main, Vector3(-12, 2.95, 0.36), Vector3(5.8, 0.55, 0.22), "coto_blue")
+	_box(main, Vector3(-12, 1.40, 0.34), Vector3(4.8, 2.55, 0.12), "glass")
+	_text(main, Vector3(-12, 2.96, 0.49), "COTO · ENTRADA", 0.36, "coto_yellow", false, true)
 
-	var side_frame: Transform3D = _frame(site["side"])
-	_box(side_frame, Vector3(7.5, 2.98, 0.28), Vector3(5.2, 0.52, 0.16), "coto_red")
-	_text(side_frame, Vector3(7.5, 2.98, 0.38), "ESTACIONAMIENTO", 0.34, "shop_white", false, true)
+	var side_frame: Transform3D = _frame(puey_front)
+	_box(side_frame, Vector3(4.0, 2.98, 0.28), Vector3(5.2, 0.52, 0.16), "coto_red")
+	_text(side_frame, Vector3(4.0, 2.98, 0.42), "ESTACIONAMIENTO", 0.34, "shop_white", false, true)
 
 	for p: Vector3 in [Vector3(-1145, 6.85, 64), Vector3(-1128, 6.85, 64)]:
 		b._box(p, Vector3(5.2, 1.4, 3.4), "silver_metal")

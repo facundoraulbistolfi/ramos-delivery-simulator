@@ -21,6 +21,9 @@ const MUTED: Color = Color("a7b6bc")
 const ORANGE: Color = Color("ff9854")
 const CYAN: Color = Color("68d1d2")
 const GREEN: Color = Color("28e070")
+const GOLD: Color = Color("ffd700")
+const MAGENTA: Color = Color("d855ff")
+const RED_ALERT: Color = Color("ff4838")
 const GAME_VERSION: String = "alpha-0.0.2"
 
 var _order_panel: PanelContainer
@@ -28,12 +31,24 @@ var _status_panel: PanelContainer
 var _speed_label: Label
 var _speed_bar: ProgressBar
 var _boost_bar: ProgressBar
+var _aura_bar: ProgressBar
+var _aura_fill_style: StyleBoxFlat
+var _aura_value_label: Label
+var _aura_rank_label: Label
 var _lap_label: Label
 var _time_label: Label
 var _best_label: Label
 var _toast_panel: PanelContainer
 var _toast_label: Label
 var _toast_remaining: float = 0.0
+var _stunt_banner: PanelContainer
+var _stunt_banner_style: StyleBoxFlat
+var _stunt_title_label: Label
+var _stunt_detail_label: Label
+var _stunt_danger_bar: ProgressBar
+var _stunt_danger_fill: StyleBoxFlat
+var _stunt_flash_remaining: float = 0.0
+var _stunt_live_active: bool = false
 var _pause_overlay: ColorRect
 var _resume_button: Button
 var _route_bar: ProgressBar
@@ -72,6 +87,9 @@ var _summary_money_label: Label
 var _summary_orders_label: Label
 var _summary_tips_label: Label
 var _summary_fines_label: Label
+var _summary_aura_bonus_label: Label
+var _summary_final_score_label: Label
+var _summary_aura_detail_label: Label
 var _summary_duration_label: Label
 var _summary_highscores_vbox: VBoxContainer
 var _summary_record_badge: Label
@@ -112,6 +130,7 @@ func _ready() -> void:
 	# 2. Right panel: Speed, current location & bike status ("velocidad, ubicación actual y eso en el otro")
 	_build_status_panel(screen)
 
+	_build_stunt_banner(screen)
 	_build_toast(screen)
 	_build_map_overlay(screen)
 	_build_teleport_overlay(screen)
@@ -186,6 +205,10 @@ func set_gameplay_panels_visible(vis: bool) -> void:
 		_status_panel.visible = vis
 	if is_instance_valid(_order_panel):
 		_order_panel.visible = vis and (_current_game_mode == 1)
+	if not vis and is_instance_valid(_stunt_banner):
+		_stunt_banner.visible = false
+		_stunt_live_active = false
+		_stunt_flash_remaining = 0.0
 
 
 func load_settings() -> Dictionary:
@@ -319,8 +342,17 @@ func show_shift_summary(summary: Dictionary) -> void:
 	_summary_dialog_open = true
 	if is_instance_valid(_summary_overlay):
 		_summary_overlay.visible = true
+		var net_money: int = int(summary.get("total_money", 0))
+		var aura_bonus: int = int(summary.get("aura_bonus", 0))
+		var aura_mult: float = float(summary.get("aura_multiplier", 1.0))
+		var final_score: int = int(summary.get("final_score", net_money + aura_bonus))
+		var aura_pts: int = int(summary.get("aura", 0))
+		var aura_rank: String = str(summary.get("aura_rank", "SIN AURA"))
+		var stunts: int = int(summary.get("stunt_count", 0))
+		var wipeouts: int = int(summary.get("wipeout_count", 0))
+
 		if is_instance_valid(_summary_money_label):
-			_summary_money_label.text = "$ %d" % int(summary.get("total_money", 0))
+			_summary_money_label.text = "$ %d" % net_money
 		if is_instance_valid(_summary_orders_label):
 			_summary_orders_label.text = "%d pedidos" % int(summary.get("completed_count", 0))
 		if is_instance_valid(_summary_tips_label):
@@ -329,6 +361,14 @@ func show_shift_summary(summary: Dictionary) -> void:
 			var fines: int = int(summary.get("total_crash_fines", 0))
 			var crashes: int = int(summary.get("crash_count", 0))
 			_summary_fines_label.text = "-$ %d (%d)" % [fines, crashes]
+		if is_instance_valid(_summary_aura_bonus_label):
+			_summary_aura_bonus_label.text = "+%d (x%.2f)" % [aura_bonus, aura_mult]
+		if is_instance_valid(_summary_final_score_label):
+			_summary_final_score_label.text = "★ PUNTAJE FINAL: %d PTS ★" % final_score
+		if is_instance_valid(_summary_aura_detail_label):
+			_summary_aura_detail_label.text = "Aura al cierre: %d / 1000 (%s) · Acrobacias exitosas: %d · Caídas: %d" % [
+				aura_pts, aura_rank, stunts, wipeouts
+			]
 		if is_instance_valid(_summary_record_badge):
 			var is_record: bool = bool(summary.get("is_record", false))
 			_summary_record_badge.visible = is_record
@@ -343,14 +383,16 @@ func show_shift_summary(summary: Dictionary) -> void:
 			else:
 				for i: int in range(highscores.size()):
 					var h: Dictionary = highscores[i] as Dictionary
-					var row_str: String = "#%d  ·  $ %d neto  |  %d entregas  |  multas -$ %d  (%s)" % [
+					var h_mult: float = float(h.get("aura_mult", 1.0))
+					var row_str: String = "#%d  ·  %d pts  |  %d entregas  |  Aura x%.2f  |  multas -$ %d  (%s)" % [
 						i + 1,
 						int(h.get("score", 0)),
 						int(h.get("orders", 0)),
+						h_mult,
 						int(h.get("fines", 0)),
 						str(h.get("date", ""))
 					]
-					var color: Color = ORANGE if (i + 1 == player_rank) else PAPER
+					var color: Color = GOLD if (i + 1 == player_rank) else PAPER
 					var item_lbl: Label = _label(_summary_highscores_vbox, row_str, 12, color)
 					item_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	overlay_state_changed.emit(is_blocking_gameplay())
@@ -489,6 +531,13 @@ func update_route(speed_kmh: float, boost_ratio: float, station: float, length_m
 
 
 func update_mission(state_data: Dictionary) -> void:
+	if state_data.has("aura"):
+		update_aura(
+			int(state_data.get("aura", 0)),
+			int(state_data.get("max_aura", 1000)),
+			float(state_data.get("aura_multiplier", 1.0)),
+			str(state_data.get("aura_rank", "SIN AURA"))
+		)
 	if not is_instance_valid(_mission_target_label):
 		return
 	var st: int = int(state_data.get("state", 0))
@@ -530,9 +579,18 @@ func update_mission(state_data: Dictionary) -> void:
 		var par_t: float = float(state_data.get("par_time", 60.0))
 		var deliv_el: float = float(state_data.get("delivery_elapsed", 0.0))
 		var par_rem: float = par_t - deliv_el
+		var is_multi: bool = bool(state_data.get("is_multi_drop", false))
+		var deliv_idx: int = int(state_data.get("delivery_index", 0))
+		var deliv_cnt: int = int(state_data.get("delivery_count", 2))
+		var step_prefix: String = ""
+		if is_multi:
+			step_prefix = "ENTREGA %d DE %d · " % [deliv_idx + 1, deliv_cnt]
+		else:
+			step_prefix = "ENTREGAR EN DIRECCIÓN · "
+
 		if par_rem >= 0.0:
-			_mission_step_label.text = "ENTREGAR EN DIRECCIÓN · TIEMPO PAR: %02d:%02d (A TIEMPO):" % [
-				floori(par_rem / 60.0), int(par_rem) % 60
+			_mission_step_label.text = "%sTIEMPO PAR: %02d:%02d (A TIEMPO):" % [
+				step_prefix, floori(par_rem / 60.0), int(par_rem) % 60
 			]
 			_mission_step_label.add_theme_color_override("font_color", GREEN)
 			_mission_payout_label.text = "Tarifa: $ %d · Propina: $ %d (100%% intacta)" % [
@@ -541,7 +599,7 @@ func update_mission(state_data: Dictionary) -> void:
 			_mission_payout_label.add_theme_color_override("font_color", GREEN)
 		else:
 			var overdue: int = roundi(-par_rem)
-			_mission_step_label.text = "ENTREGAR · DEMORADO +%d s (PERDIENDO PROPINA):" % overdue
+			_mission_step_label.text = "%sDEMORADO +%d s (PERDIENDO PROPINA):" % [step_prefix, overdue]
 			_mission_step_label.add_theme_color_override("font_color", Color("ff4838"))
 			_mission_payout_label.text = "Tarifa: $ %d · Propina restante: $ %d / $ %d" % [
 				int(state_data.get("base_fee", 0)), cur_tip, max_tip
@@ -549,8 +607,17 @@ func update_mission(state_data: Dictionary) -> void:
 			_mission_payout_label.add_theme_color_override("font_color", ORANGE if cur_tip > 0 else Color("ff4838"))
 
 		_mission_target_label.text = str(state_data.get("dest_address", "")).to_upper()
-		_mission_ref_label.text = "%s · Ramos Mejía" % str(state_data.get("dest_between", ""))
-		_mission_item_label.text = "Llevando: %s (%s)" % [str(state_data.get("order_item", "")), str(state_data.get("locale_name", ""))]
+		var zone_str: String = str(state_data.get("dest_zone", ""))
+		var zone_suffix: String = " · %s" % zone_str if not zone_str.is_empty() else " · Ramos Mejía"
+		_mission_ref_label.text = "%s%s" % [str(state_data.get("dest_between", "")), zone_suffix]
+
+		if is_multi and deliv_idx == 0:
+			var next_addr: String = str(state_data.get("next_dest_address", ""))
+			_mission_item_label.text = "1ª Parada · Siguiente entrega: %s" % next_addr
+		elif is_multi:
+			_mission_item_label.text = "2ª y última parada del reparto combinado (%s)" % str(state_data.get("locale_name", ""))
+		else:
+			_mission_item_label.text = "Llevando: %s (%s)" % [str(state_data.get("order_item", "")), str(state_data.get("locale_name", ""))]
 	elif st == 3: # ORDER_SELECTION
 		_mission_step_label.text = "SELECCIÓN DE PEDIDOS:"
 		_mission_step_label.add_theme_color_override("font_color", CYAN)
@@ -565,6 +632,109 @@ func _process(delta: float) -> void:
 		_toast_remaining = maxf(0.0, _toast_remaining - delta)
 		_toast_panel.modulate.a = minf(1.0, _toast_remaining * 3.0)
 		_toast_panel.visible = _toast_remaining > 0.0
+
+	if not _stunt_live_active and _stunt_flash_remaining > 0.0:
+		_stunt_flash_remaining = maxf(0.0, _stunt_flash_remaining - delta)
+		if is_instance_valid(_stunt_banner):
+			_stunt_banner.modulate.a = minf(1.0, _stunt_flash_remaining * 3.2)
+			_stunt_banner.visible = _stunt_flash_remaining > 0.0
+
+
+func update_aura(aura_val: int, max_aura: int, mult: float, rank_name: String) -> void:
+	if not is_instance_valid(_aura_bar):
+		return
+	var ratio: float = clampf(float(aura_val) / maxf(1.0, float(max_aura)), 0.0, 1.0)
+	_aura_bar.value = ratio
+
+	var tier_col: Color = CYAN
+	if aura_val >= 850:
+		tier_col = GOLD
+	elif aura_val >= 600:
+		tier_col = MAGENTA
+	elif aura_val >= 350:
+		tier_col = ORANGE
+	elif aura_val >= 150:
+		tier_col = GREEN
+
+	if _aura_fill_style != null:
+		_aura_fill_style.bg_color = tier_col
+	if is_instance_valid(_aura_value_label):
+		_aura_value_label.text = "%d · x%.2f" % [aura_val, mult]
+		_aura_value_label.add_theme_color_override("font_color", tier_col)
+	if is_instance_valid(_aura_rank_label):
+		if aura_val == 0:
+			_aura_rank_label.text = "[Q/CTRL] Willy & Flip · [E/X] Stoppie"
+			_aura_rank_label.add_theme_color_override("font_color", MUTED)
+		else:
+			var pct: int = roundi((mult - 1.0) * 100.0)
+			_aura_rank_label.text = "%s (+%d%% Puntaje Final)" % [rank_name, pct]
+			_aura_rank_label.add_theme_color_override("font_color", tier_col)
+
+
+func update_stunt_live(active: bool, title: String, stats_text: String, pending_aura: int, danger_ratio: float) -> void:
+	if not is_instance_valid(_stunt_banner):
+		return
+	_stunt_live_active = active
+	if not active:
+		if _stunt_flash_remaining <= 0.0:
+			_stunt_banner.visible = false
+		return
+
+	_stunt_flash_remaining = 0.0
+	_stunt_banner.modulate.a = 1.0
+	_stunt_banner.visible = true
+
+	var d_col: Color = GREEN if danger_ratio < 0.30 else (ORANGE if danger_ratio < 0.70 else RED_ALERT)
+	if _stunt_banner_style != null:
+		_stunt_banner_style.border_color = d_col
+	_stunt_title_label.text = title
+	_stunt_title_label.add_theme_color_override("font_color", RED_ALERT if danger_ratio >= 0.70 else GOLD)
+	if pending_aura > 0:
+		_stunt_detail_label.text = "%s   ·   +%d AURA" % [stats_text, pending_aura]
+	else:
+		_stunt_detail_label.text = "%s   ·   Mantené para sumar Aura" % stats_text
+	_stunt_detail_label.add_theme_color_override("font_color", PAPER)
+
+	_stunt_danger_bar.visible = true
+	_stunt_danger_bar.value = clampf(0.18 + danger_ratio * 0.82, 0.0, 1.0)
+	if _stunt_danger_fill != null:
+		_stunt_danger_fill.bg_color = d_col
+
+
+func show_stunt_completed(stunt_name: String, detail_text: String, aura_gained: int, combo_count: int) -> void:
+	if not is_instance_valid(_stunt_banner):
+		return
+	_stunt_live_active = false
+	_stunt_flash_remaining = 2.6
+	_stunt_banner.modulate.a = 1.0
+	_stunt_banner.visible = true
+	if _stunt_banner_style != null:
+		_stunt_banner_style.border_color = GOLD if combo_count >= 2 else GREEN
+	var combo_str: String = "  [COMBO x%d]" % combo_count if combo_count >= 2 else ""
+	_stunt_title_label.text = "★ %s +%d AURA%s ★" % [stunt_name, aura_gained, combo_str]
+	_stunt_title_label.add_theme_color_override("font_color", GOLD if combo_count >= 2 else GREEN)
+	_stunt_detail_label.text = detail_text
+	_stunt_detail_label.add_theme_color_override("font_color", PAPER)
+	_stunt_danger_bar.visible = false
+
+
+func show_stunt_wipeout(reason: String, aura_lost: int) -> void:
+	if not is_instance_valid(_stunt_banner):
+		return
+	_stunt_live_active = false
+	_stunt_flash_remaining = 3.0
+	_stunt_banner.modulate.a = 1.0
+	_stunt_banner.visible = true
+	if _stunt_banner_style != null:
+		_stunt_banner_style.border_color = RED_ALERT
+	if aura_lost > 0:
+		_stunt_title_label.text = "💥 %s (-%d AURA)" % [reason, aura_lost]
+	else:
+		_stunt_title_label.text = "💥 %s (AURA EN 0)" % reason
+	_stunt_title_label.add_theme_color_override("font_color", RED_ALERT)
+	_stunt_detail_label.text = "¡Te caíste de la moto! Cuidá el ángulo de equilibrio"
+	_stunt_detail_label.add_theme_color_override("font_color", PAPER)
+	_stunt_danger_bar.visible = false
 
 
 func show_message(message: String, duration: float = 2.5) -> void:
@@ -596,12 +766,12 @@ func _build_order_panel(screen: Control) -> void:
 	_mission_ref_label = _label(rows, "Buscando dirección en Ramos Mejía", 13, CYAN)
 	_mission_item_label = _label(rows, "Guiate por los carteles de las calles", 12, MUTED)
 	_mission_payout_label = _label(rows, "Tarifa: $ 0 · Propina: $ 0", 12, GREEN)
-	var shortcuts: Label = _label(rows, "[M] Mapa   [TAB] Teletransporte   [N] Elegir pedidos", 11, Color(MUTED.r, MUTED.g, MUTED.b, 0.85))
+	var shortcuts: Label = _label(rows, "[M] Mapa  [N] Pedidos  [Q/CTRL] Willy  [E] Stoppie", 11, Color(MUTED.r, MUTED.g, MUTED.b, 0.85))
 	shortcuts.add_theme_constant_override("line_spacing", 0)
 
 
 func _build_status_panel(screen: Control) -> void:
-	var panel: PanelContainer = _panel(screen, Rect2(-328.0, 24.0, 304.0, 168.0), Vector2.RIGHT)
+	var panel: PanelContainer = _panel(screen, Rect2(-340.0, 24.0, 316.0, 224.0), Vector2.RIGHT)
 	panel.name = "StatusPanel"
 	_status_panel = panel
 	var rows: VBoxContainer = _rows(panel, 5)
@@ -636,8 +806,52 @@ func _build_status_panel(screen: Control) -> void:
 	_boost_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_boost_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 
+	# Aura Meter (GTA stunt bonus multiplier)
+	var aura_top_row: HBoxContainer = HBoxContainer.new()
+	aura_top_row.add_theme_constant_override("separation", 6)
+	rows.add_child(aura_top_row)
+	var aura_lbl: Label = _label(aura_top_row, "★ AURA", 11, GOLD)
+	aura_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_aura_value_label = _label(aura_top_row, "0 · x1.00", 11, CYAN)
+	_aura_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+	_aura_bar = _bar(rows, CYAN, 7.0)
+	_aura_bar.name = "AuraBar"
+	_aura_bar.value = 0.0
+	_aura_fill_style = StyleBoxFlat.new()
+	_aura_fill_style.bg_color = CYAN
+	_aura_bar.add_theme_stylebox_override("fill", _aura_fill_style)
+
+	_aura_rank_label = _label(rows, "[Q/CTRL] Willy & Flip · [E/X] Stoppie", 10, MUTED)
+	_aura_rank_label.clip_text = true
+
 	_route_bar = _bar(rows, CYAN, 2.0)
 	_route_bar.visible = false
+
+
+func _build_stunt_banner(screen: Control) -> void:
+	_stunt_banner = _panel(screen, Rect2(-260.0, -124.0, 520.0, 78.0), Vector2(0.5, 1.0))
+	_stunt_banner.name = "StuntBanner"
+	_stunt_banner_style = (_stunt_banner.get_theme_stylebox("panel") as StyleBoxFlat).duplicate() as StyleBoxFlat
+	_stunt_banner_style.border_width_top = 2
+	_stunt_banner_style.border_width_bottom = 2
+	_stunt_banner_style.border_width_left = 2
+	_stunt_banner_style.border_width_right = 2
+	_stunt_banner_style.border_color = GOLD
+	_stunt_banner.add_theme_stylebox_override("panel", _stunt_banner_style)
+
+	var srows: VBoxContainer = _rows(_stunt_banner, 3)
+	srows.alignment = BoxContainer.ALIGNMENT_CENTER
+	_stunt_title_label = _label(srows, "WILLY", 18, GOLD)
+	_stunt_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_stunt_detail_label = _label(srows, "0 m · 0.0 s", 13, PAPER)
+	_stunt_detail_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	_stunt_danger_bar = _bar(srows, GREEN, 5.0)
+	_stunt_danger_fill = StyleBoxFlat.new()
+	_stunt_danger_fill.bg_color = GREEN
+	_stunt_danger_bar.add_theme_stylebox_override("fill", _stunt_danger_fill)
+	_stunt_banner.hide()
 
 
 func _build_map_overlay(screen: Control) -> void:
@@ -882,9 +1096,9 @@ func _build_mode_selection_dialog(screen: Control) -> void:
 		"• Turno contrarreloj de 15 minutos.\n" +
 		"• Salida fija en «La Tanga de Ramos».\n" +
 		"• 3 opciones de pedidos gastronómicos reales.\n" +
-		"• Propinas dinámicas según tiempo PAR.\n" +
-		"• Chocar autos descuenta dinero de tu billetera.\n" +
-		"• Sin teletransporte: manejo a puro asfalto.",
+		"• Acrobacias (Willy, Stoppie, Flips) cargan tu AURA.\n" +
+		"• Tu Aura multiplica el Puntaje Final hasta x2.00.\n" +
+		"• Caerte o chocar autos descuenta Aura y plata.",
 		12, PAPER
 	)
 	c1_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -992,18 +1206,16 @@ func _build_delivery_briefing_dialog(screen: Control) -> void:
 	rows.add_child(text_panel)
 
 	var briefing_content: Label = _label(text_panel,
-		"🛵 PUNTO DE SALIDA FIJO:\n" +
-		"   Comenzás siempre en la emblemática «Tanga de Ramos» (Av. de Mayo y Rivadavia).\n\n" +
-		"⏱️ TURNO DE 15 MINUTOS:\n" +
-		"   Tenés exactamente 15:00 min para realizar todas las entregas que puedas antes de que cierre la noche.\n\n" +
-		"🍔 3 OPCIONES DE PEDIDOS Y COMPROMISO:\n" +
-		"   Elegí entre 3 órdenes gastronómicas de locales reales de Ramos. Una vez aceptado un pedido debés completarlo: ¡no se puede cancelar ni cambiar de pedido en curso!\n\n" +
-		"💰 PROPINAS DINÁMICAS (PAR):\n" +
-		"   El tiempo de entrega corre desde que el pedido está listo en cocina. Llegar a tiempo garantiza propina máxima; llegar tarde decae la propina progresivamente.\n\n" +
-		"🚗 CUIDADO CON EL TRÁFICO Y MULTAS POR CHOQUE:\n" +
-		"   Chocar autos estacionados o en movimiento descuenta plata de tu billetera según el impacto (desde rayones leves hasta destrucción total).\n\n" +
-		"🚫 REGLAS ESTRICTAS DE COMPETENCIA:\n" +
-		"   El teletransporte [TAB] y los atajos rápidos están totalmente deshabilitados en este modo competitivo. Al finalizar el turno podrás guardar tu puntaje en el podio de récords.",
+		"🛵 PUNTO DE SALIDA Y TURNO DE 15 MINUTOS:\n" +
+		"   Salís desde «La Tanga de Ramos» (Av. de Mayo y Rivadavia) con 15:00 min exactos para maximizar tu recaudación.\n\n" +
+		"🍔 3 OPCIONES DE PEDIDOS Y TIEMPO PAR:\n" +
+		"   Elegí entre 3 órdenes reales y completalas sin cancelar. Entregar antes del tiempo PAR asegura el 100% de la propina.\n\n" +
+		"🔥 ACROBACIAS ESTILO GTA Y MEDIDOR DE AURA (BONO FINAL x1.00 A x2.00):\n" +
+		"   • [Q] o [CTRL] acelerando: WILLY (en rampas/aire: BACKFLIP)  |  [E] o [X] en velocidad: STOPPIE / INVERTIDO (en aire: FRONTFLIP).\n" +
+		"   • Aterrizar limpio carga tu MEDIDOR DE AURA y bonifica tu Puntaje Final hasta +100% (x2.00).\n" +
+		"   • ¡Cuidado con pasarte de ángulo! Si te caés de la moto perdés tiempo valioso y se desploma tu Aura.\n\n" +
+		"🚗 MULTAS POR CHOQUE Y REGLAS COMPETITIVAS:\n" +
+		"   Chocar vehículos descuenta dinero de tu billetera. El teletransporte [TAB] y atajos están deshabilitados.",
 		12, PAPER
 	)
 	briefing_content.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1244,7 +1456,7 @@ func _build_order_selection_dialog(screen: Control) -> void:
 	_order_overlay.visible = false
 	screen.add_child(_order_overlay)
 
-	var modal: PanelContainer = _panel(_order_overlay, Rect2(-540.0, -270.0, 1080.0, 540.0), Vector2(0.5, 0.5))
+	var modal: PanelContainer = _panel(_order_overlay, Rect2(-550.0, -300.0, 1100.0, 600.0), Vector2(0.5, 0.5))
 	modal.mouse_filter = Control.MOUSE_FILTER_STOP
 	var rows: VBoxContainer = _rows(modal, 12)
 
@@ -1271,14 +1483,21 @@ func _rebuild_order_cards() -> void:
 
 	for offer: Dictionary in _current_order_offers:
 		var idx: int = int(offer.get("index", 0))
+		var is_multi: bool = bool(offer.get("is_multi_drop", false))
 		var card: PanelContainer = PanelContainer.new()
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 		var card_style: StyleBoxFlat = StyleBoxFlat.new()
-		card_style.bg_color = Color(0.08, 0.14, 0.19, 0.95)
-		card_style.border_color = Color(0.40, 0.65, 0.75, 0.45)
-		card_style.set_border_width_all(1)
+		if is_multi:
+			card_style.bg_color = Color(0.12, 0.12, 0.08, 0.96)
+			card_style.border_color = Color("ffd700")
+			card_style.set_border_width_all(2)
+		else:
+			card_style.bg_color = Color(0.08, 0.14, 0.19, 0.95)
+			card_style.border_color = Color(0.40, 0.65, 0.75, 0.45)
+			card_style.set_border_width_all(1)
+
 		card_style.set_corner_radius_all(6)
 		card_style.content_margin_left = 14.0
 		card_style.content_margin_right = 14.0
@@ -1291,47 +1510,78 @@ func _rebuild_order_cards() -> void:
 		# Top badge
 		var badge_row: HBoxContainer = HBoxContainer.new()
 		crows.add_child(badge_row)
-		_label(badge_row, "PEDIDO #%d [TECLA %d]" % [idx + 1, idx + 1], 12, ORANGE)
+		if is_multi:
+			_label(badge_row, "★ REPARTO COMBINADO [2 CASAS] · [%d]" % (idx + 1), 12, Color("ffd700"))
+		elif idx == 1:
+			_label(badge_row, "LARGA DISTANCIA · [%d]" % (idx + 1), 12, CYAN)
+		else:
+			_label(badge_row, "PEDIDO EXPRÉS / CERCANO · [%d]" % (idx + 1), 12, ORANGE)
 
 		var loc: Dictionary = offer.get("locale", {})
-		_label(crows, str(loc.get("name", "Local")), 17, PAPER)
+		_label(crows, str(loc.get("name", "Local")), 16, PAPER)
 		_label(crows, "%s (%s)" % [str(loc.get("address", "")), str(loc.get("between", ""))], 11, CYAN)
 
 		_label(crows, "ÍTEM A TRANSPORTAR:", 10, MUTED)
-		_label(crows, str(offer.get("order_item", "")), 13, PAPER)
-		_label(crows, "Valor del producto: $ %d" % int(offer.get("product_price", 0)), 12, ORANGE)
+		_label(crows, str(offer.get("order_item", "")), 12, PAPER)
+		_label(crows, "Valor: $ %d" % int(offer.get("product_price", 0)), 11, ORANGE)
 
-		var dest: Dictionary = offer.get("dest_address", {})
-		_label(crows, "ENTREGA:", 10, MUTED)
-		_label(crows, str(dest.get("full_address", "Dirección")), 14, PAPER)
-		_label(crows, str(dest.get("between", "")), 11, CYAN)
+		if is_multi:
+			var addrs: Array = offer.get("dest_addresses", [])
+			if addrs.size() >= 2:
+				var d1: Dictionary = addrs[0]
+				var d2: Dictionary = addrs[1]
+				_label(crows, "1ª ENTREGA:", 10, Color("ffd700"))
+				_label(crows, "%s (%s)" % [str(d1.get("full_address", "")), str(d1.get("zone", ""))], 12, PAPER)
+				_label(crows, str(d1.get("between", "")), 10, CYAN)
+
+				_label(crows, "2ª ENTREGA:", 10, Color("ffd700"))
+				_label(crows, "%s (%s)" % [str(d2.get("full_address", "")), str(d2.get("zone", ""))], 12, PAPER)
+				_label(crows, str(d2.get("between", "")), 10, CYAN)
+			else:
+				var dest: Dictionary = offer.get("dest_address", {})
+				_label(crows, "ENTREGA:", 10, MUTED)
+				_label(crows, "%s (%s)" % [str(dest.get("full_address", "")), str(dest.get("zone", ""))], 13, PAPER)
+				_label(crows, str(dest.get("between", "")), 10, CYAN)
+		else:
+			var dest: Dictionary = offer.get("dest_address", {})
+			_label(crows, "ENTREGA:", 10, MUTED)
+			_label(crows, "%s (%s)" % [str(dest.get("full_address", "Dirección")), str(dest.get("zone", ""))], 13, PAPER)
+			_label(crows, str(dest.get("between", "")), 10, CYAN)
 
 		var total_d: float = float(offer.get("total_dist", 0.0))
 		var prep_t: float = float(offer.get("prep_time", 20.0))
 		var par_t: float = float(offer.get("par_time", 60.0))
-		_label(crows, "DISTANCIA TOTAL: %.1f km" % (total_d / 1000.0), 12, PAPER)
-		_label(crows, "Cocina: %d s · Tiempo PAR: %02d:%02d" % [roundi(prep_t), floori(par_t / 60.0), int(par_t) % 60], 11, MUTED)
+		_label(crows, "DISTANCIA: %.1f km  ·  PAR: %02d:%02d" % [(total_d / 1000.0), floori(par_t / 60.0), int(par_t) % 60], 11, MUTED)
 
 		# Payout highlight
 		var payout_box: PanelContainer = PanelContainer.new()
 		var pstyle: StyleBoxFlat = StyleBoxFlat.new()
-		pstyle.bg_color = Color(0.12, 0.22, 0.16, 0.85)
-		pstyle.border_color = GREEN
+		if is_multi:
+			pstyle.bg_color = Color(0.24, 0.20, 0.06, 0.90)
+			pstyle.border_color = Color("ffd700")
+		else:
+			pstyle.bg_color = Color(0.12, 0.22, 0.16, 0.85)
+			pstyle.border_color = GREEN
 		pstyle.set_border_width_all(1)
 		pstyle.set_corner_radius_all(4)
 		pstyle.content_margin_left = 10.0
 		pstyle.content_margin_right = 10.0
-		pstyle.content_margin_top = 8.0
-		pstyle.content_margin_bottom = 8.0
+		pstyle.content_margin_top = 6.0
+		pstyle.content_margin_bottom = 6.0
 		payout_box.add_theme_stylebox_override("panel", pstyle)
 		crows.add_child(payout_box)
 
 		var prows: VBoxContainer = VBoxContainer.new()
 		payout_box.add_child(prows)
-		_label(prows, "PAGO ESTIMADO: $ %d" % int(offer.get("total_payout", 0)), 16, GREEN)
-		_label(prows, "Tarifa $ %d + Propina máx $ %d" % [int(offer.get("base_fee", 0)), int(offer.get("max_tip", 0))], 11, PAPER)
+		if is_multi:
+			_label(prows, "PAGO TOTAL COMBO: $ %d" % int(offer.get("total_payout", 0)), 15, Color("ffd700"))
+			_label(prows, "Tarifa $ %d + Propina máx $ %d (+35%% Bono)" % [int(offer.get("base_fee", 0)), int(offer.get("max_tip", 0))], 10, PAPER)
+		else:
+			_label(prows, "PAGO ESTIMADO: $ %d" % int(offer.get("total_payout", 0)), 15, GREEN)
+			_label(prows, "Tarifa $ %d + Propina máx $ %d" % [int(offer.get("base_fee", 0)), int(offer.get("max_tip", 0))], 10, PAPER)
 
-		var btn: Button = _button(crows, "ACEPTAR PEDIDO [%d]" % (idx + 1))
+		var btn_text: String = "ACEPTAR REPARTO COMBINADO [%d]" % (idx + 1) if is_multi else "ACEPTAR PEDIDO [%d]" % (idx + 1)
+		var btn: Button = _button(crows, btn_text)
 		btn.pressed.connect(func() -> void:
 			close_order_selection_dialog()
 			order_offer_chosen.emit(idx)
@@ -1349,51 +1599,75 @@ func _build_shift_summary_dialog(screen: Control) -> void:
 	_summary_overlay.visible = false
 	screen.add_child(_summary_overlay)
 
-	var modal: PanelContainer = _panel(_summary_overlay, Rect2(-380.0, -280.0, 760.0, 560.0), Vector2(0.5, 0.5))
+	var modal: PanelContainer = _panel(_summary_overlay, Rect2(-430.0, -308.0, 860.0, 616.0), Vector2(0.5, 0.5))
 	modal.mouse_filter = Control.MOUSE_FILTER_STOP
-	var rows: VBoxContainer = _rows(modal, 12)
+	var rows: VBoxContainer = _rows(modal, 10)
 	rows.alignment = BoxContainer.ALIGNMENT_CENTER
 
 	var t1: Label = _label(rows, "¡FIN DEL TURNO NOCTURNO!", 24, PAPER)
 	t1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var t2: Label = _label(rows, "Completaste 15 minutos de repartos por las calles de Ramos Mejía.", 13, CYAN)
+	var t2: Label = _label(rows, "Completaste 15 minutos de repartos y acrobacias por Ramos Mejía.", 13, CYAN)
 	t2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	_summary_record_badge = _label(rows, "🏆 ¡NUEVO RÉCORD HISTÓRICO EN RAMOS MEJÍA! 🏆", 14, ORANGE)
+	_summary_record_badge = _label(rows, "🏆 ¡NUEVO RÉCORD HISTÓRICO EN RAMOS MEJÍA! 🏆", 14, GOLD)
 	_summary_record_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_summary_record_badge.visible = false
 
 	var stats_box: HBoxContainer = HBoxContainer.new()
-	stats_box.add_theme_constant_override("separation", 10)
+	stats_box.add_theme_constant_override("separation", 8)
 	rows.add_child(stats_box)
 
 	var mc: PanelContainer = PanelContainer.new()
 	mc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var mr: VBoxContainer = _rows(mc, 4)
-	_label(mr, "TOTAL NETO", 11, CYAN)
-	_summary_money_label = _label(mr, "$ 0", 20, GREEN)
+	var mr: VBoxContainer = _rows(mc, 3)
+	_label(mr, "BILLETERA NETA", 10, CYAN)
+	_summary_money_label = _label(mr, "$ 0", 18, GREEN)
 	stats_box.add_child(mc)
 
 	var dc: PanelContainer = PanelContainer.new()
 	dc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var dr: VBoxContainer = _rows(dc, 4)
-	_label(dr, "ENTREGAS", 11, CYAN)
-	_summary_orders_label = _label(dr, "0 pedidos", 20, PAPER)
+	var dr: VBoxContainer = _rows(dc, 3)
+	_label(dr, "ENTREGAS", 10, CYAN)
+	_summary_orders_label = _label(dr, "0 pedidos", 18, PAPER)
 	stats_box.add_child(dc)
 
 	var tc: PanelContainer = PanelContainer.new()
 	tc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var tr: VBoxContainer = _rows(tc, 4)
-	_label(tr, "PROPINAS", 11, CYAN)
-	_summary_tips_label = _label(tr, "$ 0", 20, ORANGE)
+	var tr: VBoxContainer = _rows(tc, 3)
+	_label(tr, "PROPINAS", 10, CYAN)
+	_summary_tips_label = _label(tr, "$ 0", 18, ORANGE)
 	stats_box.add_child(tc)
 
 	var fc: PanelContainer = PanelContainer.new()
 	fc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var fr: VBoxContainer = _rows(fc, 4)
-	_label(fr, "MULTAS CHOQUES", 11, CYAN)
-	_summary_fines_label = _label(fr, "-$ 0", 20, Color("ff6352"))
+	var fr: VBoxContainer = _rows(fc, 3)
+	_label(fr, "MULTAS CHOQUES", 10, CYAN)
+	_summary_fines_label = _label(fr, "-$ 0", 18, Color("ff6352"))
 	stats_box.add_child(fc)
+
+	var ac: PanelContainer = PanelContainer.new()
+	ac.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var ar: VBoxContainer = _rows(ac, 3)
+	_label(ar, "BONO DE AURA", 10, GOLD)
+	_summary_aura_bonus_label = _label(ar, "+0 (x1.00)", 18, GOLD)
+	stats_box.add_child(ac)
+
+	# Final Score Banner with Aura Breakdown
+	var final_box: PanelContainer = PanelContainer.new()
+	var fb_style: StyleBoxFlat = StyleBoxFlat.new()
+	fb_style.bg_color = Color(0.14, 0.12, 0.04, 0.92)
+	fb_style.border_color = GOLD
+	fb_style.set_border_width_all(2)
+	fb_style.set_corner_radius_all(5)
+	fb_style.set_content_margin_all(8.0)
+	final_box.add_theme_stylebox_override("panel", fb_style)
+	rows.add_child(final_box)
+
+	var fb_rows: VBoxContainer = _rows(final_box, 2)
+	_summary_final_score_label = _label(fb_rows, "★ PUNTAJE FINAL: 0 PTS ★", 21, GOLD)
+	_summary_final_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_summary_aura_detail_label = _label(fb_rows, "Aura al cierre: 0 / 1000 (SIN AURA) · Acrobacias: 0 · Caídas: 0", 12, PAPER)
+	_summary_aura_detail_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	var hs_panel: PanelContainer = PanelContainer.new()
 	var hs_style: StyleBoxFlat = StyleBoxFlat.new()

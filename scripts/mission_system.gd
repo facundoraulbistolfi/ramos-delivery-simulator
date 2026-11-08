@@ -25,6 +25,7 @@ enum State {
 const SHIFT_DURATION: float = 900.0 ## 15 minutes (900 s)
 const TRIGGER_RADIUS: float = 14.5
 const HIGHSCORES_PATH: String = "user://highscores.json"
+const MAX_AURA: float = 1000.0
 
 var track: MotoTrack
 var bike: MotoBike
@@ -34,6 +35,12 @@ var total_money: int = 0
 var total_tips: int = 0
 var total_crash_fines: int = 0
 var crash_count: int = 0
+var aura: float = 0.0
+var peak_aura: float = 0.0
+var stunt_count: int = 0
+var wipeout_count: int = 0
+var total_aura_gained: int = 0
+var total_aura_lost: int = 0
 var shift_time_remaining: float = SHIFT_DURATION
 var shift_active: bool = false
 
@@ -51,6 +58,11 @@ var prep_time_remaining: float = 0.0
 var delivery_elapsed: float = 0.0
 var order_ready: bool = false
 var waiting_at_local: bool = false
+
+# Multi-drop order tracking
+var current_is_multi_drop: bool = false
+var current_dest_addresses: Array[Dictionary] = []
+var current_delivery_index: int = 0
 
 # 3 active selectable offers
 var active_offers: Array[Dictionary] = []
@@ -248,8 +260,9 @@ func choose_start_location(location_id: int) -> void:
 			total_money = 0
 			total_tips = 0
 			completed_count = 0
+			_reset_aura_stats()
 			mission_notification.emit(
-				"¡ARRANCÓ LA NOCHE EN RAMOS MEJÍA!\nObjetivo: juntar la mayor cantidad de plata en 10 minutos",
+				"¡ARRANCÓ LA NOCHE EN RAMOS MEJÍA!\nObjetivo: juntar la mayor cantidad de plata en 15 minutos",
 				4.5
 			)
 			request_new_order_selection()
@@ -263,9 +276,13 @@ func start_delivery_mode() -> void:
 	total_crash_fines = 0
 	crash_count = 0
 	completed_count = 0
+	_reset_aura_stats()
 	current_locale = {}
 	current_address = {}
 	current_order_item = ""
+	current_is_multi_drop = false
+	current_dest_addresses.clear()
+	current_delivery_index = 0
 	_update_marker_visibility(false)
 	if is_instance_valid(_bike_cargo_box):
 		_bike_cargo_box.visible = false
@@ -283,10 +300,91 @@ func start_delivery_mode() -> void:
 func set_free_roam_mode() -> void:
 	shift_active = false
 	state = State.IDLE
+	_reset_aura_stats()
 	_update_marker_visibility(false)
 	if is_instance_valid(_bike_cargo_box):
 		_bike_cargo_box.visible = false
 	_emit_state()
+
+
+func _reset_aura_stats() -> void:
+	aura = 0.0
+	peak_aura = 0.0
+	stunt_count = 0
+	wipeout_count = 0
+	total_aura_gained = 0
+	total_aura_lost = 0
+	if is_instance_valid(bike) and bike.has_method("set_aura_visual_ratio"):
+		bike.set_aura_visual_ratio(0.0)
+
+
+func get_aura_ratio() -> float:
+	return clampf(aura / MAX_AURA, 0.0, 1.0)
+
+
+func get_aura_multiplier() -> float:
+	return 1.0 + get_aura_ratio()
+
+
+func get_aura_rank_name() -> String:
+	if aura < 150.0:
+		return "SIN AURA"
+	elif aura < 350.0:
+		return "PILOTO CALLEJERO"
+	elif aura < 600.0:
+		return "PURO CORTE"
+	elif aura < 850.0:
+		return "REY DE RAMOS"
+	return "LEYENDA ★ MAX AURA"
+
+
+func add_aura(amount: int, _stunt_name: String = "") -> int:
+	var gain: int = maxi(0, amount)
+	var before: float = aura
+	aura = clampf(aura + float(gain), 0.0, MAX_AURA)
+	var actual_added: int = roundi(aura - before)
+	peak_aura = maxf(peak_aura, aura)
+	stunt_count += 1
+	total_aura_gained += gain
+	if is_instance_valid(bike) and bike.has_method("set_aura_visual_ratio"):
+		bike.set_aura_visual_ratio(get_aura_ratio())
+	_emit_state()
+	return actual_added
+
+
+func lose_aura(amount: int, _reason: String = "") -> int:
+	var extra_high_aura_loss: int = roundi((aura - 400.0) * 0.12) if aura > 400.0 else 0
+	var penalty: int = maxi(0, amount) + extra_high_aura_loss
+	var before: float = aura
+	aura = clampf(aura - float(penalty), 0.0, MAX_AURA)
+	var actual_lost: int = roundi(before - aura)
+	wipeout_count += 1
+	total_aura_lost += actual_lost
+	if is_instance_valid(bike) and bike.has_method("set_aura_visual_ratio"):
+		bike.set_aura_visual_ratio(get_aura_ratio())
+	_emit_state()
+	return actual_lost
+
+
+func calculate_final_score() -> Dictionary:
+	var ratio: float = get_aura_ratio()
+	var mult: float = get_aura_multiplier()
+	var bonus: int = 0
+	if total_money > 0:
+		bonus = roundi(float(total_money) * ratio)
+	var final_pts: int = total_money + bonus
+	return {
+		"net_money": total_money,
+		"aura": roundi(aura),
+		"peak_aura": roundi(peak_aura),
+		"aura_ratio": ratio,
+		"aura_multiplier": mult,
+		"aura_rank": get_aura_rank_name(),
+		"aura_bonus": bonus,
+		"final_score": final_pts,
+		"stunt_count": stunt_count,
+		"wipeout_count": wipeout_count
+	}
 
 
 func restart_night_shift() -> void:
@@ -310,13 +408,15 @@ func load_highscores() -> Array[Dictionary]:
 	return []
 
 
-func save_highscore(score: int, orders: int, fines: int) -> Dictionary:
+func save_highscore(score: int, orders: int, fines: int, final_aura: int = 0, aura_mult: float = 1.0) -> Dictionary:
 	var list: Array[Dictionary] = load_highscores()
 	var now_date: String = Time.get_date_string_from_system()
 	var entry: Dictionary = {
 		"score": score,
 		"orders": orders,
 		"fines": fines,
+		"aura": final_aura,
+		"aura_mult": snappedf(aura_mult, 0.01),
 		"date": now_date
 	}
 	list.append(entry)
@@ -395,7 +495,18 @@ func select_order_offer(offer_index: int) -> void:
 		return
 	var offer: Dictionary = active_offers[offer_index]
 	current_locale = offer["locale"]
-	current_address = offer["dest_address"]
+	current_is_multi_drop = bool(offer.get("is_multi_drop", false))
+	current_dest_addresses.clear()
+	if current_is_multi_drop:
+		for d in offer.get("dest_addresses", []):
+			current_dest_addresses.append(d)
+		current_delivery_index = 0
+		current_address = current_dest_addresses[0]
+	else:
+		current_address = offer["dest_address"]
+		current_dest_addresses.append(current_address)
+		current_delivery_index = 0
+
 	current_order_item = str(offer["order_item"])
 	current_product_price = int(offer["product_price"])
 	current_base_fee = int(offer["base_fee"])
@@ -417,47 +528,103 @@ func select_order_offer(offer_index: int) -> void:
 	_update_marker_visibility(true)
 	_emit_state()
 
+	var order_desc: String = "REPARTO COMBINADO [2 CASAS]" if current_is_multi_drop else "PEDIDO ACEPTADO"
 	mission_notification.emit(
-		"PEDIDO ACEPTADO [%d]: %s\nRetirá en %s (prep: %.0f s)" % [
+		"%s [%d]: %s\nRetirá en %s (prep: %.0f s)" % [
+			order_desc,
 			offer_index + 1,
 			current_order_item,
 			str(current_locale.get("name", "")),
 			current_prep_time
 		],
-		4.0
+		4.5
 	)
 
 
 func _on_pickup_completed() -> void:
 	state = State.DELIVER
 	waiting_at_local = false
+	current_delivery_index = 0
+	current_address = current_dest_addresses[0]
+
 	if is_instance_valid(_bike_cargo_box):
 		_bike_cargo_box.visible = true
 	_update_marker_for_state()
 	_emit_state()
-	mission_notification.emit(
-		"¡PEDIDO RETIRADO EN MANO!\nLlevalo a ojo a %s (%s)" % [
-			str(current_address.get("full_address", "")),
-			str(current_address.get("between", ""))
-		],
-		5.0
-	)
+
+	if current_is_multi_drop:
+		mission_notification.emit(
+			"¡REPARTO COMBINADO RETIRADO!\n1ª Parada: %s (%s)" % [
+				str(current_address.get("full_address", "")),
+				str(current_address.get("between", ""))
+			],
+			5.0
+		)
+	else:
+		mission_notification.emit(
+			"¡PEDIDO RETIRADO EN MANO!\nLlevalo a ojo a %s (%s)" % [
+				str(current_address.get("full_address", "")),
+				str(current_address.get("between", ""))
+			],
+			5.0
+		)
 
 
 func _on_delivery_completed() -> void:
+	if current_is_multi_drop and current_delivery_index == 0 and current_dest_addresses.size() > 1:
+		completed_count += 1
+		# Partial payout on first stop (40% of base fee + tip)
+		var partial_fee: int = roundi(current_base_fee * 0.40)
+		var partial_tip: int = roundi(current_tip * 0.40)
+		var partial_payout: int = partial_fee + partial_tip
+		total_money += partial_payout
+		total_tips += partial_tip
+
+		# Advance to second stop
+		current_delivery_index = 1
+		current_address = current_dest_addresses[1]
+
+		# Keep cargo box visible on bike
+		if is_instance_valid(_bike_cargo_box):
+			_bike_cargo_box.visible = true
+
+		_update_marker_for_state()
+		_emit_state()
+
+		mission_notification.emit(
+			"¡1ª ENTREGA COMPLETADA! (+ $ %d)\nAhora llevale el segundo pedido a: %s (%s)" % [
+				partial_payout,
+				str(current_address.get("full_address", "")),
+				str(current_address.get("between", ""))
+			],
+			5.0
+		)
+		return
+
+	# Final delivery completed (single order or second stop of multi-drop)
 	var earned_tip: int = roundi(current_tip)
-	var payout: int = current_base_fee + earned_tip
-	total_money += payout
-	total_tips += earned_tip
-	completed_count += 1
+	var payout: int = 0
+	if current_is_multi_drop:
+		completed_count += 1
+		var remaining_fee: int = current_base_fee - roundi(current_base_fee * 0.40)
+		var remaining_tip: int = earned_tip - roundi(earned_tip * 0.40)
+		payout = remaining_fee + remaining_tip
+		total_money += payout
+		total_tips += remaining_tip
+	else:
+		completed_count += 1
+		payout = current_base_fee + earned_tip
+		total_money += payout
+		total_tips += earned_tip
 
 	if is_instance_valid(_bike_cargo_box):
 		_bike_cargo_box.visible = false
 
 	var status_text: String = "¡A TIEMPO!" if earned_tip >= current_max_tip else "CON DEMORA"
+	var combo_tag: String = "REPARTO COMBINADO FINALIZADO" if current_is_multi_drop else "ENTREGA EXITOSA"
 	mission_notification.emit(
-		"¡ENTREGA EXITOSA %s!\nCobraste: $ %d (Tarifa $ %d + Propina $ %d)\nBilletera: $ %d · Entregas: %d" % [
-			status_text, payout, current_base_fee, earned_tip, total_money, completed_count
+		"¡%s %s!\nCobraste: $ %d · Total Billetera: $ %d · Entregas: %d" % [
+			combo_tag, status_text, payout, total_money, completed_count
 		],
 		5.0
 	)
@@ -473,13 +640,25 @@ func _end_night_shift() -> void:
 	shift_active = false
 	state = State.SHIFT_SUMMARY
 	_update_marker_visibility(false)
-	var hs_result: Dictionary = save_highscore(total_money, completed_count, total_crash_fines)
+	var score_data: Dictionary = calculate_final_score()
+	var final_score: int = int(score_data["final_score"])
+	var aura_bonus: int = int(score_data["aura_bonus"])
+	var aura_mult: float = float(score_data["aura_multiplier"])
+	var hs_result: Dictionary = save_highscore(final_score, completed_count, total_crash_fines, roundi(aura), aura_mult)
 	var summary: Dictionary = {
 		"total_money": total_money,
 		"total_tips": total_tips,
 		"completed_count": completed_count,
 		"total_crash_fines": total_crash_fines,
 		"crash_count": crash_count,
+		"aura": roundi(aura),
+		"peak_aura": roundi(peak_aura),
+		"aura_multiplier": aura_mult,
+		"aura_rank": str(score_data["aura_rank"]),
+		"aura_bonus": aura_bonus,
+		"final_score": final_score,
+		"stunt_count": stunt_count,
+		"wipeout_count": wipeout_count,
 		"duration": SHIFT_DURATION,
 		"highscores": hs_result.get("highscores", []),
 		"is_record": hs_result.get("is_record", false),
@@ -518,38 +697,105 @@ func _generate_3_order_offers() -> Array[Dictionary]:
 
 		var loc_pt: Array = locale.get("visit", [0, 0])
 		var loc_v2: Vector2 = Vector2(float(loc_pt[0]), float(loc_pt[1]))
-		var dest_addr: Dictionary = _pick_best_address_for_locale(loc_v2, str(locale.get("street", "")))
-
-		var addr_pt: Vector2 = dest_addr.get("point", Vector2.ZERO) as Vector2
 		var pickup_dist: float = bike_pos.distance_to(loc_v2)
-		var delivery_dist: float = loc_v2.distance_to(addr_pt)
-		var total_dist: float = pickup_dist + delivery_dist
 
 		var lkey: String = str(locale.get("key", ""))
 		var cat_data: Dictionary = ORDER_CATALOG.get(lkey, {"item": "Pedido Especial de Ramos Mejía", "price": 10000, "prep": 25.0})
 		var prod_price: int = int(cat_data["price"])
 		var prep_t: float = float(cat_data["prep"])
 
-		# Economics: base delivery fee + tip based on product price & delivery distance
-		var base_fee: int = roundi(900.0 + delivery_dist * 0.75)
-		var max_tip: int = roundi(prod_price * 0.15 + delivery_dist * 0.50)
-		var par_t: float = roundf(delivery_dist / 11.5) + 30.0
+		if i == 0:
+			# Tier 0: Pedido Exprés / Cercano (280m - 750m)
+			var dest_addr: Dictionary = _pick_address_in_distance_range(loc_v2, str(locale.get("street", "")), 280.0, 750.0)
+			var addr_pt: Vector2 = dest_addr.get("point", Vector2.ZERO) as Vector2
+			var delivery_dist: float = loc_v2.distance_to(addr_pt)
+			var total_dist: float = pickup_dist + delivery_dist
+			var base_fee: int = roundi(1100.0 + delivery_dist * 0.85)
+			var max_tip: int = roundi(prod_price * 0.15 + delivery_dist * 0.50)
+			var par_t: float = roundf(delivery_dist / 11.5) + 35.0
 
-		offers.append({
-			"index": i,
-			"locale": locale,
-			"dest_address": dest_addr,
-			"order_item": str(cat_data["item"]),
-			"product_price": prod_price,
-			"base_fee": base_fee,
-			"max_tip": max_tip,
-			"total_payout": base_fee + max_tip,
-			"pickup_dist": pickup_dist,
-			"delivery_dist": delivery_dist,
-			"total_dist": total_dist,
-			"prep_time": prep_t,
-			"par_time": par_t
-		})
+			offers.append({
+				"index": i,
+				"tier_name": "Pedido Exprés",
+				"is_multi_drop": false,
+				"locale": locale,
+				"dest_address": dest_addr,
+				"dest_addresses": [dest_addr],
+				"order_item": str(cat_data["item"]),
+				"product_price": prod_price,
+				"base_fee": base_fee,
+				"max_tip": max_tip,
+				"total_payout": base_fee + max_tip,
+				"pickup_dist": pickup_dist,
+				"delivery_dist": delivery_dist,
+				"total_dist": total_dist,
+				"prep_time": prep_t,
+				"par_time": par_t
+			})
+		elif i == 1:
+			# Tier 1: Pedido Barrial / Larga Distancia (1000m - 2400m - abarca todo Ramos)
+			var dest_addr: Dictionary = _pick_address_in_distance_range(loc_v2, str(locale.get("street", "")), 1000.0, 2400.0)
+			var addr_pt: Vector2 = dest_addr.get("point", Vector2.ZERO) as Vector2
+			var delivery_dist: float = loc_v2.distance_to(addr_pt)
+			var total_dist: float = pickup_dist + delivery_dist
+			var base_fee: int = roundi(1600.0 + delivery_dist * 1.15)
+			var max_tip: int = roundi(prod_price * 0.18 + delivery_dist * 0.70)
+			var par_t: float = roundf(delivery_dist / 11.5) + 55.0
+
+			offers.append({
+				"index": i,
+				"tier_name": "Larga Distancia",
+				"is_multi_drop": false,
+				"locale": locale,
+				"dest_address": dest_addr,
+				"dest_addresses": [dest_addr],
+				"order_item": str(cat_data["item"]),
+				"product_price": prod_price,
+				"base_fee": base_fee,
+				"max_tip": max_tip,
+				"total_payout": base_fee + max_tip,
+				"pickup_dist": pickup_dist,
+				"delivery_dist": delivery_dist,
+				"total_dist": total_dist,
+				"prep_time": prep_t,
+				"par_time": par_t
+			})
+		else:
+			# Tier 2: REPARTO COMBINADO (2 Casas / Multi-Drop) - Más plata y más recorrido
+			var addr1: Dictionary = _pick_address_in_distance_range(loc_v2, str(locale.get("street", "")), 750.0, 1500.0)
+			var pt1: Vector2 = addr1.get("point", Vector2.ZERO) as Vector2
+			var addr2: Dictionary = _pick_address_in_distance_range(pt1, str(addr1.get("street", "")), 650.0, 1600.0)
+			var pt2: Vector2 = addr2.get("point", Vector2.ZERO) as Vector2
+
+			var leg1: float = loc_v2.distance_to(pt1)
+			var leg2: float = pt1.distance_to(pt2)
+			var delivery_dist: float = leg1 + leg2
+			var total_dist: float = pickup_dist + delivery_dist
+
+			var combo_price: int = roundi(prod_price * 1.9)
+			# Double base fee + double tip + Combo bonus (+35%)
+			var base_fee: int = roundi((2200.0 + delivery_dist * 1.25) * 1.35)
+			var max_tip: int = roundi((combo_price * 0.18 + delivery_dist * 0.75 + 1600.0) * 1.35)
+			var par_t: float = roundf(delivery_dist / 11.0) + 85.0
+
+			offers.append({
+				"index": i,
+				"tier_name": "Reparto Combinado",
+				"is_multi_drop": true,
+				"locale": locale,
+				"dest_address": addr1,
+				"dest_addresses": [addr1, addr2],
+				"order_item": "Reparto Doble: %s + 2º Menú" % str(cat_data["item"]),
+				"product_price": combo_price,
+				"base_fee": base_fee,
+				"max_tip": max_tip,
+				"total_payout": base_fee + max_tip,
+				"pickup_dist": pickup_dist,
+				"delivery_dist": delivery_dist,
+				"total_dist": total_dist,
+				"prep_time": prep_t + 10.0,
+				"par_time": par_t
+			})
 
 	return offers
 
@@ -563,13 +809,13 @@ func _pick_unique_locale(used_keys: Dictionary) -> Dictionary:
 	return cand
 
 
-func _pick_best_address_for_locale(loc_pos: Vector2, loc_street: String) -> Dictionary:
+func _pick_address_in_distance_range(from_pos: Vector2, from_street: String, min_d: float, max_d: float) -> Dictionary:
 	var cand: Dictionary = _addresses[_rng.randi_range(0, _addresses.size() - 1)]
-	for _a: int in range(16):
+	for _a: int in range(35):
 		var test_addr: Dictionary = _addresses[_rng.randi_range(0, _addresses.size() - 1)]
 		var p: Vector2 = test_addr.get("point", Vector2.ZERO) as Vector2
-		var d: float = loc_pos.distance_to(p)
-		if d >= 240.0 and d <= 1350.0 and str(test_addr.get("street", "")) != loc_street:
+		var d: float = from_pos.distance_to(p)
+		if d >= min_d and d <= max_d and str(test_addr.get("street", "")) != from_street:
 			return test_addr
 	return cand
 
@@ -606,13 +852,21 @@ func _update_marker_for_state() -> void:
 		_marker_root.global_position = pos
 		_ring_mat.albedo_color = Color("ff9854")
 		_ring_mat.emission = Color("ff9854")
-		_marker_label.text = "RETIRAR PEDIDO\n%s\n(%s)" % [str(current_locale.get("name", "")), current_order_item]
+		var order_tag: String = "REPARTO COMBINADO (2 CASAS)" if current_is_multi_drop else current_order_item
+		_marker_label.text = "RETIRAR PEDIDO\n%s\n(%s)" % [str(current_locale.get("name", "")), order_tag]
 	elif state == State.DELIVER:
 		var pos: Vector3 = _get_active_target_position()
 		_marker_root.global_position = pos
 		_ring_mat.albedo_color = Color("28e070")
 		_ring_mat.emission = Color("28e070")
-		_marker_label.text = "ENTREGAR PEDIDO AQUÍ\n%s" % str(current_address.get("full_address", ""))
+		if current_is_multi_drop:
+			_marker_label.text = "ENTREGA %d DE %d AQUÍ\n%s" % [
+				current_delivery_index + 1,
+				current_dest_addresses.size(),
+				str(current_address.get("full_address", ""))
+			]
+		else:
+			_marker_label.text = "ENTREGAR PEDIDO AQUÍ\n%s" % str(current_address.get("full_address", ""))
 
 		var sw_pt: Vector2 = current_address.get("sidewalk_point", Vector2(pos.x, pos.z)) as Vector2
 		var offset: Vector3 = Vector3(sw_pt.x - pos.x, 0.17, sw_pt.y - pos.z)
@@ -754,6 +1008,13 @@ func _emit_state() -> void:
 		"total_tips": total_tips,
 		"total_crash_fines": total_crash_fines,
 		"crash_count": crash_count,
+		"aura": roundi(aura),
+		"max_aura": roundi(MAX_AURA),
+		"aura_ratio": get_aura_ratio(),
+		"aura_multiplier": get_aura_multiplier(),
+		"aura_rank": get_aura_rank_name(),
+		"stunt_count": stunt_count,
+		"wipeout_count": wipeout_count,
 		"shift_time_remaining": shift_time_remaining,
 		"shift_active": shift_active,
 		"locale_name": str(current_locale.get("name", "")),
@@ -770,9 +1031,31 @@ func _emit_state() -> void:
 		"delivery_elapsed": delivery_elapsed,
 		"dest_address": str(current_address.get("full_address", "")),
 		"dest_between": str(current_address.get("between", "")),
+		"dest_zone": str(current_address.get("zone", "")),
+		"is_multi_drop": current_is_multi_drop,
+		"delivery_index": current_delivery_index,
+		"delivery_count": current_dest_addresses.size() if current_is_multi_drop else 1,
+		"next_dest_address": str(current_dest_addresses[1].get("full_address", "")) if (current_is_multi_drop and current_dest_addresses.size() > 1 and current_delivery_index == 0) else "",
+		"next_dest_between": str(current_dest_addresses[1].get("between", "")) if (current_is_multi_drop and current_dest_addresses.size() > 1 and current_delivery_index == 0) else "",
+		"next_dest_zone": str(current_dest_addresses[1].get("zone", "")) if (current_is_multi_drop and current_dest_addresses.size() > 1 and current_delivery_index == 0) else "",
 		"active_offers": active_offers
 	}
 	mission_updated.emit(payload)
+
+
+func _get_zone_name(pos: Vector2) -> String:
+	if absf(pos.x + 120.0) < 450.0 and absf(pos.y) < 220.0:
+		return "Ramos Centro"
+	var horiz: String = ""
+	if pos.x < -1050.0:
+		horiz = "Oeste"
+	elif pos.x > 380.0:
+		horiz = "Este"
+
+	if pos.y < -30.0:
+		return ("Ramos Norte " + horiz).strip_edges()
+	else:
+		return ("Ramos Sur " + horiz).strip_edges()
 
 
 func _index_locales_and_addresses() -> void:
@@ -797,35 +1080,34 @@ func _index_locales_and_addresses() -> void:
 		var v_pt: Array = entry["visit"]
 		var v2: Vector2 = Vector2(float(v_pt[0]), float(v_pt[1]))
 		entry["between"] = _find_cross_streets_near(v2, str(entry.get("street", "")), named_nodes)
+		entry["zone"] = _get_zone_name(v2)
 		_locales.append(entry)
 
-	var priority_streets: Array[String] = [
-		"Avenida de Mayo", "Mariano Moreno", "Bolívar", "Pueyrredón", "Almirante Brown",
-		"Espora", "Avellaneda", "Necochea", "Belgrano", "Alsina", "Sarmiento",
-		"Bartolomé Mitre", "Viamonte", "General Alvarado", "Profesor Juan T. Pizzurno",
-		"Avenida General San Martín", "Doctor Gabriel Ardoino", "Leandro N. Alem",
-		"Suipacha", "Castelli", "Colón", "General Acha", "Martín Miguel de Güemes",
-		"Avenida Gaona", "Avenida Díaz Vélez"
-	]
 	var seen_blocks: Dictionary = {}
 	for s: Dictionary in streets:
 		var sname: String = str(s.get("name", ""))
-		if not (sname in priority_streets) or bool(s.get("bridge", false)):
+		if sname.is_empty() or bool(s.get("bridge", false)):
 			continue
 		var pts: Array = s["points"]
 		for i: int in range(pts.size() - 1):
 			var a: Vector2 = Vector2(float(pts[i][0]), float(pts[i][1]))
 			var b: Vector2 = Vector2(float(pts[i + 1][0]), float(pts[i + 1][1]))
 			var seg_len: float = a.distance_to(b)
-			if seg_len < 52.0 or seg_len > 175.0:
+			if seg_len < 32.0 or seg_len > 240.0:
 				continue
 			var mid: Vector2 = (a + b) * 0.5
-			if mid.x < -1950.0 or mid.x > 420.0 or mid.y < -520.0 or mid.y > 1480.0:
-				continue
 			var cross_a: String = _closest_other_street(a, sname, named_nodes)
 			var cross_b: String = _closest_other_street(b, sname, named_nodes)
-			if cross_a.is_empty() or cross_b.is_empty() or cross_a == cross_b:
-				continue
+			var between_desc: String = ""
+			if not cross_a.is_empty() and not cross_b.is_empty() and cross_a != cross_b:
+				between_desc = "Entre %s y %s" % [cross_a, cross_b]
+			elif not cross_a.is_empty():
+				between_desc = "Casi esquina %s" % cross_a
+			elif not cross_b.is_empty():
+				between_desc = "Casi esquina %s" % cross_b
+			else:
+				between_desc = _get_zone_name(mid)
+
 			var dir: Vector2 = (b - a).normalized()
 			var right: Vector2 = Vector2(-dir.y, dir.x)
 			var altura: int = _estimate_door_number(sname, mid)
@@ -840,7 +1122,8 @@ func _index_locales_and_addresses() -> void:
 				"street": sname,
 				"number": altura,
 				"full_address": "%s %d" % [sname, altura],
-				"between": "Entre %s y %s" % [cross_a, cross_b],
+				"between": between_desc,
+				"zone": _get_zone_name(mid),
 				"point": stop_pt,
 				"sidewalk_point": sidewalk_pt,
 				"normal": -right

@@ -205,6 +205,12 @@ func run() -> void:
 		bike.respawn(Transform3D(Basis.IDENTITY, deliver_pos))
 		for frame: int in range(6): await physics_frame
 		check(int(ms.get("completed_count")) >= 1,"visiting destination address completes delivery mission")
+		check(int(ms.get("_addresses").size()) > 800, "citywide address pool indexed across entire 8 km² map")
+		# Verify multi-drop delivery order (reparto combinado 2 casas)
+		var offers: Array = ms.call("_generate_3_order_offers")
+		check(offers.size() == 3, "generates 3 delivery tier offers")
+		var combo_offer: Dictionary = offers[2]
+		check(bool(combo_offer.get("is_multi_drop", false)) and (combo_offer.get("dest_addresses") as Array).size() == 2, "tier 2 offer is multi-drop with 2 destination stops")
 		# Verify car collision penalty mechanic in delivery mode
 		var money_before: int = int(ms.get("total_money"))
 		var fines_before: int = int(ms.get("total_crash_fines"))
@@ -244,5 +250,91 @@ func run() -> void:
 		check(not car_hit.is_empty(), "parked cars have physical obstacle collision")
 	var tm: Node3D = game.get_node_or_null("TrafficManager") as Node3D
 	check(tm != null and int(tm.get("lanes").size()) > 500, "traffic manager initialized with directed street lanes graph")
+	check(tm != null and int(tm.get("lanes_by_cell").size()) > 100, "traffic manager spatial hash grid active for citywide vehicle spawning")
+	# Verify GTA-style motorcycle stunts, wipeout recovery, custom stunt ramps, and Aura score multiplier
+	check(InputMap.has_action("stunt_wheelie") and InputMap.has_action("stunt_stoppie"), "stunt wheelie and stoppie input actions registered")
+	check(hud != null and hud.find_child("AuraBar", true, false) != null and hud.find_child("StuntBanner", true, false) != null, "HUD Aura meter bar and StuntBanner initialized")
+	check(track.find_child("RampaMayoNorte", true, false) != null and track.find_child("RampaMayoCentro", true, false) != null, "custom urban stunt ramps instantiated in CustomDecorations")
+	if ms != null:
+		if tm != null:
+			tm.call("clear_all_vehicles")
+			tm.process_mode = Node.PROCESS_MODE_DISABLED
+		ms.call("_reset_aura_stats")
+		bike.max_speed = 34.0
+		bike.respawn(track.get_spawn_transform())
+		for frame: int in range(6): await physics_frame
+		# 1. Clean Wheelie -> increases Aura
+		Input.action_press("accelerate")
+		for frame: int in range(30): await physics_frame
+		Input.action_press("stunt_wheelie")
+		var saw_wheelie: bool = false
+		for frame: int in range(72):
+			var st_w: float = track.sample_route(bike.position).x
+			var tgt_w: Vector3 = point_at(minf(st_w + 16.0, track.get_track_length()))
+			var dir_w: Vector3 = tgt_w - bike.position
+			dir_w.y = 0.0
+			var ang_w: float = (-bike.global_basis.z).signed_angle_to(dir_w.normalized(), Vector3.UP)
+			Input.action_release("steer_left")
+			Input.action_release("steer_right")
+			Input.action_press("steer_left" if ang_w > 0.0 else "steer_right", clampf(absf(ang_w) * 2.5, 0.0, 1.0))
+			await physics_frame
+			if bike.is_doing_wheelie and bike.stunt_pitch > 0.25:
+				saw_wheelie = true
+		Input.action_release("stunt_wheelie")
+		Input.action_release("steer_left")
+		Input.action_release("steer_right")
+		for frame: int in range(38): await physics_frame
+		Input.action_release("accelerate")
+		var aura_after_wheelie: float = float(ms.get("aura"))
+		check(saw_wheelie and aura_after_wheelie > 0.0 and int(ms.get("stunt_count")) >= 1, "performing clean wheelie increases Aura meter (aura=%.0f)" % aura_after_wheelie)
+
+		# 2. Clean Stoppie -> increases Aura further
+		bike.respawn(track.get_spawn_transform())
+		for frame: int in range(4): await physics_frame
+		Input.action_press("accelerate")
+		for frame: int in range(45): await physics_frame
+		Input.action_release("accelerate")
+		Input.action_press("stunt_stoppie")
+		var saw_stoppie: bool = false
+		for frame: int in range(44):
+			await physics_frame
+			if bike.is_doing_stoppie and bike.stunt_pitch < -0.20:
+				saw_stoppie = true
+		Input.action_release("stunt_stoppie")
+		for frame: int in range(38): await physics_frame
+		var aura_after_stoppie: float = float(ms.get("aura"))
+		check(saw_stoppie and aura_after_stoppie > aura_after_wheelie, "performing clean stoppie increases Aura meter (aura=%.0f)" % aura_after_stoppie)
+
+		# 3. Over-rotating Wheelie -> triggers Wipeout (caída), deducts Aura, and recovers cleanly
+		var aura_before_fall: float = maxf(aura_after_stoppie, 300.0)
+		ms.set("aura", aura_before_fall)
+		bike.respawn(track.get_spawn_transform())
+		bike._post_wipeout_grace = 0.0
+		for frame: int in range(4): await physics_frame
+		Input.action_press("accelerate")
+		Input.action_press("boost")
+		for frame: int in range(24): await physics_frame
+		Input.action_press("stunt_wheelie")
+		var saw_wipeout: bool = false
+		for frame: int in range(180):
+			await physics_frame
+			if bike.is_wiped_out:
+				saw_wipeout = true
+				break
+		Input.action_release("stunt_wheelie")
+		Input.action_release("boost")
+		Input.action_release("accelerate")
+		var aura_after_fall: float = float(ms.get("aura"))
+		check(saw_wipeout and aura_after_fall < aura_before_fall and int(ms.get("wipeout_count")) >= 1, "failing stunt by over-rotating causes wipeout and loses Aura (%.0f -> %.0f)" % [aura_before_fall, aura_after_fall])
+		for frame: int in range(110): await physics_frame
+		check(not bike.is_wiped_out, "rider remounts and recovers cleanly after stunt wipeout")
+
+		# 4. Final Score Aura Bonus Multiplier calculation
+		ms.set("total_money", 10000)
+		ms.set("aura", 500.0)
+		var score_calc: Dictionary = ms.call("calculate_final_score")
+		check(int(score_calc.get("aura_bonus", 0)) == 5000 and int(score_calc.get("final_score", 0)) == 15000, "Aura acts as bonus multiplier on final shift score (x1.50 -> 15000 pts)")
+		if tm != null:
+			tm.process_mode = Node.PROCESS_MODE_INHERIT
 	print("MAP_QA failures=",failures)
 	quit(failures)

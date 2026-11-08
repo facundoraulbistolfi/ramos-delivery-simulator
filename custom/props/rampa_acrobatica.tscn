@@ -1,0 +1,116 @@
+[gd_scene format=3 uid="uid://crampstunt001"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_SteelDeck"]
+albedo_color = Color(0.18, 0.21, 0.25, 1)
+metallic = 0.65
+roughness = 0.45
+
+[sub_resource type="StandardMaterial3D" id="Mat_HazardStripe"]
+albedo_color = Color(1, 0.65, 0.08, 1)
+emission_enabled = true
+emission = Color(1, 0.52, 0.05, 1)
+emission_energy_multiplier = 1.4
+roughness = 0.35
+
+[sub_resource type="StandardMaterial3D" id="Mat_NeonChevron"]
+albedo_color = Color(0.25, 0.92, 0.96, 1)
+emission_enabled = true
+emission = Color(0.18, 0.85, 0.95, 1)
+emission_energy_multiplier = 2.1
+
+[sub_resource type="StandardMaterial3D" id="Mat_Support"]
+albedo_color = Color(0.12, 0.14, 0.17, 1)
+metallic = 0.5
+roughness = 0.6
+
+[sub_resource type="BoxMesh" id="Mesh_Deck"]
+material = SubResource("Mat_SteelDeck")
+size = Vector3(3.6, 0.22, 8.0)
+
+[sub_resource type="BoxMesh" id="Mesh_SideRail"]
+material = SubResource("Mat_HazardStripe")
+size = Vector3(0.14, 0.18, 8.0)
+
+[sub_resource type="BoxMesh" id="Mesh_CenterStripe"]
+material = SubResource("Mat_NeonChevron")
+size = Vector3(0.45, 0.03, 1.1)
+
+[sub_resource type="BoxMesh" id="Mesh_StrutFront"]
+material = SubResource("Mat_Support")
+size = Vector3(0.22, 2.25, 0.22)
+
+[sub_resource type="BoxMesh" id="Mesh_StrutMid"]
+material = SubResource("Mat_Support")
+size = Vector3(0.22, 1.15, 0.22)
+
+[sub_resource type="BoxMesh" id="Mesh_CrossBar"]
+material = SubResource("Mat_HazardStripe")
+size = Vector3(3.5, 0.18, 0.18)
+
+[sub_resource type="BoxShape3D" id="Shape_RampDeck"]
+size = Vector3(3.6, 0.24, 8.1)
+
+[node name="RampaAcrobatica" type="Node3D"]
+
+[node name="Deck" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.950516, 0.310676, 0, -0.310676, 0.950516, 0, 1.14, -0.04)
+visibility_range_end = 190.0
+mesh = SubResource("Mesh_Deck")
+
+[node name="RailLeft" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.950516, 0.310676, 0, -0.310676, 0.950516, -1.75, 1.28, -0.04)
+visibility_range_end = 190.0
+mesh = SubResource("Mesh_SideRail")
+
+[node name="RailRight" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.950516, 0.310676, 0, -0.310676, 0.950516, 1.75, 1.28, -0.04)
+visibility_range_end = 190.0
+mesh = SubResource("Mesh_SideRail")
+
+[node name="Stripe1" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.950516, 0.310676, 0, -0.310676, 0.950516, 0, 0.56, 2.15)
+visibility_range_end = 160.0
+mesh = SubResource("Mesh_CenterStripe")
+
+[node name="Stripe2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.950516, 0.310676, 0, -0.310676, 0.950516, 0, 1.25, -0.04)
+visibility_range_end = 160.0
+mesh = SubResource("Mesh_CenterStripe")
+
+[node name="Stripe3" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.950516, 0.310676, 0, -0.310676, 0.950516, 0, 1.94, -2.22)
+visibility_range_end = 160.0
+mesh = SubResource("Mesh_CenterStripe")
+
+[node name="StrutFL" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.55, 1.12, -3.45)
+visibility_range_end = 160.0
+mesh = SubResource("Mesh_StrutFront")
+
+[node name="StrutFR" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.55, 1.12, -3.45)
+visibility_range_end = 160.0
+mesh = SubResource("Mesh_StrutFront")
+
+[node name="StrutML" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.55, 0.57, -0.2)
+visibility_range_end = 160.0
+mesh = SubResource("Mesh_StrutMid")
+
+[node name="StrutMR" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.55, 0.57, -0.2)
+visibility_range_end = 160.0
+mesh = SubResource("Mesh_StrutMid")
+
+[node name="CrossBarFront" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, -3.45)
+visibility_range_end = 160.0
+mesh = SubResource("Mesh_CrossBar")
+
+[node name="RampCollision" type="StaticBody3D" parent="."]
+collision_layer = 2
+collision_mask = 0
+
+[node name="CollisionDeck" type="CollisionShape3D" parent="RampCollision"]
+transform = Transform3D(1, 0, 0, 0, 0.950516, 0.310676, 0, -0.310676, 0.950516, 0, 1.13, -0.04)
+shape = SubResource("Shape_RampDeck")

@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3 uid="uid://bdeco771custom"]
+[gd_scene load_steps=4 format=3 uid="uid://bdeco771custom"]
 
 [ext_resource type="PackedScene" path="res://custom/props/estatua_belgrano.tscn" id="1_belgrano"]
 [ext_resource type="Script" path="res://scripts/editor_reference_only.gd" id="2_ref_script"]
+[ext_resource type="PackedScene" path="res://custom/props/rampa_acrobatica.tscn" id="3_rampa"]
 
 [node name="CustomDecorations" type="Node3D"]
 
@@ -10,3 +11,18 @@ script = ExtResource("2_ref_script")
 
 [node name="EstatuaManuelBelgrano" parent="." instance=ExtResource("1_belgrano")]
 transform = Transform3D(0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, 0.707107, -1191.4, 0.16, 334.1)
+
+[node name="RampaMayoNorte" parent="." instance=ExtResource("3_rampa")]
+transform = Transform3D(-0.981767, 0, 0.190090, 0, 1, 0, -0.190090, 0, -0.981767, -1459.55, 0.0, 255.63)
+
+[node name="RampaMayoCentro" parent="." instance=ExtResource("3_rampa")]
+transform = Transform3D(0.983206, 0, -0.182501, 0, 1, 0, 0.182501, 0, 0.983206, -1418.99, 0.0, 451.53)
+
+[node name="RampaMayoSur" parent="." instance=ExtResource("3_rampa")]
+transform = Transform3D(0.988775, 0, -0.149411, 0, 1, 0, 0.149411, 0, 0.988775, -1308.75, 0.0, 1088.73)
+
+[node name="RampaPlazaMitre" parent="." instance=ExtResource("3_rampa")]
+transform = Transform3D(-0.734615, 0, 0.678483, 0, 1, 0, -0.678483, 0, -0.734615, -888.10, 0.0, 482.00)
+
+[node name="RampaBomberitos" parent="." instance=ExtResource("3_rampa")]
+transform = Transform3D(0.679053, 0, 0.734091, 0, 1, 0, -0.734091, 0, 0.679053, -106.30, 0.0, 1249.00)

@@ -99,6 +99,26 @@ func build() -> void:
 	collision.shape = shape
 	body.add_child(collision)
 
+	# Explicit Layer Containers for clear scene hierarchy
+	var layer_vias: Node3D = Node3D.new()
+	layer_vias.name = "Layer_Vias"
+	map.add_child(layer_vias)
+	var layer_calles: Node3D = Node3D.new()
+	layer_calles.name = "Layer_Calles"
+	map.add_child(layer_calles)
+	var layer_veredas: Node3D = Node3D.new()
+	layer_veredas.name = "Layer_Veredas"
+	map.add_child(layer_veredas)
+	var layer_lotes: Node3D = Node3D.new()
+	layer_lotes.name = "Layer_Lotes"
+	map.add_child(layer_lotes)
+	var layer_edificios: Node3D = Node3D.new()
+	layer_edificios.name = "Layer_Edificios"
+	map.add_child(layer_edificios)
+	var layer_mobiliario: Node3D = Node3D.new()
+	layer_mobiliario.name = "Layer_Mobiliario"
+	map.add_child(layer_mobiliario)
+
 	var neighborhood: RefCounted = load("res://tools/neighborhood_geometry.gd").new()
 	neighborhood.generate(self)
 	_furniture(sections)

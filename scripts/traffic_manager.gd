@@ -12,13 +12,15 @@ var track: MotoTrack
 var bike: MotoBike
 var lanes: Array = []
 var lane_connections: Dictionary = {}
+var lanes_by_cell: Dictionary = {}
 var active_vehicles: Array = []
 
-var target_vehicle_count: int = 24
+const GRID_CELL_SIZE: float = 120.0
+var target_vehicle_count: int = 30
 var density_factor: float = 1.0
-var max_distance_from_player: float = 145.0
-var min_spawn_distance: float = 45.0
-var max_spawn_distance: float = 125.0
+var max_distance_from_player: float = 175.0
+var min_spawn_distance: float = 35.0
+var max_spawn_distance: float = 150.0
 
 func set_traffic_density(level: int) -> void:
 	match level:
@@ -61,6 +63,7 @@ func is_player_in_downtown(pos: Vector3) -> bool:
 func _build_lane_graph() -> void:
 	lanes.clear()
 	lane_connections.clear()
+	lanes_by_cell.clear()
 
 	var streets: Array = track.data.get("streets", []) + track.data.get("roads", [])
 
@@ -144,24 +147,72 @@ func _add_lane(s_idx: int, street_name: String, raw_pts: Array, offset: float, o
 		"length": total_len
 	})
 
+	# Register lane into spatial grid cells
+	var touched_cells: Dictionary = {}
+	for wp: Vector3 in wps:
+		var ckey: String = "%d_%d" % [floori(wp.x / GRID_CELL_SIZE), floori(wp.z / GRID_CELL_SIZE)]
+		if not touched_cells.has(ckey):
+			touched_cells[ckey] = true
+			if not lanes_by_cell.has(ckey):
+				lanes_by_cell[ckey] = []
+			lanes_by_cell[ckey].append(lane_id)
+
+func _get_nearby_lane_indices(pos: Vector3, radius: float = 160.0) -> Array[int]:
+	var result: Array[int] = []
+	var seen: Dictionary = {}
+	var min_cx: int = floori((pos.x - radius) / GRID_CELL_SIZE)
+	var max_cx: int = floori((pos.x + radius) / GRID_CELL_SIZE)
+	var min_cz: int = floori((pos.z - radius) / GRID_CELL_SIZE)
+	var max_cz: int = floori((pos.z + radius) / GRID_CELL_SIZE)
+
+	for cx: int in range(min_cx, max_cx + 1):
+		for cz: int in range(min_cz, max_cz + 1):
+			var ckey: String = "%d_%d" % [cx, cz]
+			if lanes_by_cell.has(ckey):
+				for lid: int in lanes_by_cell[ckey]:
+					if not seen.has(lid):
+						seen[lid] = true
+						result.append(lid)
+	return result
+
 func _seed_initial_traffic() -> void:
 	if bike == null or lanes.is_empty():
 		return
 	var player_pos: Vector3 = bike.global_position
 	var in_downtown: bool = is_player_in_downtown(player_pos)
-	target_vehicle_count = roundi((38 if in_downtown else 24) * density_factor)
+	target_vehicle_count = roundi((44 if in_downtown else 30) * density_factor)
+
+	var nearby_lanes: Array[int] = _get_nearby_lane_indices(player_pos, max_spawn_distance)
+	var pool: Array[int] = nearby_lanes if not nearby_lanes.is_empty() else []
+	if pool.is_empty():
+		for idx: int in range(lanes.size()):
+			pool.append(idx)
 
 	var seeded: int = 0
 	var attempts: int = 0
-	while seeded < target_vehicle_count and attempts < 250:
+	while seeded < target_vehicle_count and attempts < 350:
 		attempts += 1
-		var lane_idx: int = randi() % lanes.size()
+		var lane_idx: int = pool[randi() % pool.size()]
 		var l: Dictionary = lanes[lane_idx]
-		var mid_pt: Vector3 = l["waypoints"][l["waypoints"].size() / 2]
-		var d: float = player_pos.distance_to(mid_pt)
-		if d >= min_spawn_distance and d <= max_spawn_distance:
-			if _spawn_vehicle_on_lane(l, randi() % (l["waypoints"].size() - 1)):
-				seeded += 1
+		var wps: PackedVector3Array = l["waypoints"]
+
+		var candidate_wps: Array[int] = []
+		for wp_i: int in range(wps.size() - 1):
+			var d: float = player_pos.distance_to(wps[wp_i])
+			if d >= min_spawn_distance and d <= max_spawn_distance:
+				candidate_wps.append(wp_i)
+
+		if not candidate_wps.is_empty():
+			var chosen_wp: int = candidate_wps[randi() % candidate_wps.size()]
+			var spawn_pt: Vector3 = wps[chosen_wp]
+			var too_close: bool = false
+			for v in active_vehicles:
+				if is_instance_valid(v) and v.global_position.distance_to(spawn_pt) < 13.5:
+					too_close = true
+					break
+			if not too_close:
+				if _spawn_vehicle_on_lane(l, chosen_wp):
+					seeded += 1
 
 func _physics_process(delta: float) -> void:
 	if bike == null:
@@ -169,7 +220,7 @@ func _physics_process(delta: float) -> void:
 
 	var player_pos: Vector3 = bike.global_position
 	var in_downtown: bool = is_player_in_downtown(player_pos)
-	target_vehicle_count = roundi((38 if in_downtown else 24) * density_factor)
+	target_vehicle_count = roundi((44 if in_downtown else 30) * density_factor)
 
 	# 1. Cull far vehicles outside active bubble
 	var i: int = active_vehicles.size() - 1
@@ -184,7 +235,7 @@ func _physics_process(delta: float) -> void:
 
 	# 2. Maintain active population
 	_spawn_timer += delta
-	var spawn_rate: float = 0.15 if in_downtown else 0.28
+	var spawn_rate: float = 0.12 if in_downtown else 0.18
 	if _spawn_timer >= spawn_rate and active_vehicles.size() < target_vehicle_count:
 		_spawn_timer = 0.0
 		_attempt_spawn_vehicle(player_pos)
@@ -193,22 +244,38 @@ func _attempt_spawn_vehicle(player_pos: Vector3) -> bool:
 	if lanes.is_empty():
 		return false
 
+	var nearby_lanes: Array[int] = _get_nearby_lane_indices(player_pos, max_spawn_distance)
+	if nearby_lanes.is_empty():
+		return false
+
 	var attempts: int = 0
-	while attempts < 20:
+	while attempts < 15:
 		attempts += 1
-		var lane_idx: int = randi() % lanes.size()
+		var lane_idx: int = nearby_lanes[randi() % nearby_lanes.size()]
 		var l: Dictionary = lanes[lane_idx]
-		var start_pt: Vector3 = l["start"]
-		var d: float = player_pos.distance_to(start_pt)
-		if d >= min_spawn_distance and d <= max_spawn_distance:
-			# Check distance from existing vehicles
-			var too_close: bool = false
-			for v in active_vehicles:
-				if is_instance_valid(v) and v.global_position.distance_to(start_pt) < 13.0:
-					too_close = true
-					break
-			if not too_close:
-				return _spawn_vehicle_on_lane(l, 0)
+		var wps: PackedVector3Array = l["waypoints"]
+
+		var candidate_wps: Array[int] = []
+		for wp_i: int in range(wps.size() - 1):
+			var d: float = player_pos.distance_to(wps[wp_i])
+			if d >= min_spawn_distance and d <= max_spawn_distance:
+				candidate_wps.append(wp_i)
+
+		if candidate_wps.is_empty():
+			continue
+
+		var chosen_wp: int = candidate_wps[randi() % candidate_wps.size()]
+		var spawn_pt: Vector3 = wps[chosen_wp]
+
+		# Check distance from existing vehicles
+		var too_close: bool = false
+		for v in active_vehicles:
+			if is_instance_valid(v) and v.global_position.distance_to(spawn_pt) < 13.5:
+				too_close = true
+				break
+		if not too_close:
+			return _spawn_vehicle_on_lane(l, chosen_wp)
+
 	return false
 
 func _spawn_vehicle_on_lane(lane: Dictionary, start_wp_idx: int) -> bool:

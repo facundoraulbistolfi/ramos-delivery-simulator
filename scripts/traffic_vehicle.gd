@@ -303,14 +303,6 @@ func _physics_process(delta: float) -> void:
 	velocity.y = -0.4 # Maintain ground contact
 	move_and_slide()
 
-	# 8. Rotate wheels realistically according to vehicle speed
-	if speed > 0.02 and not wheel_nodes.is_empty():
-		var rot_step: float = (speed * delta) / wheel_radius
-		# Sedan and SUV models are flipped 180° (PI) so forward is -Z
-		var mult: float = -1.0 if car_type != "compact" else 1.0
-		for w in wheel_nodes:
-			w.rotate_x(rot_step * mult)
-
 func _update_turn_signaling_check() -> void:
 	if has_decided_turn or waypoints.is_empty() or manager == null:
 		return
