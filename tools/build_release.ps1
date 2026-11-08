@@ -113,14 +113,21 @@ if ($CreateTag -or $Publish) {
 # 7. Publicar automáticamente en GitHub Releases si se paso -Publish
 if ($Publish) {
     Write-Host "`n[Publicacion en GitHub Releases]" -ForegroundColor Yellow
-    $ghCli = Get-Command gh -ErrorAction SilentlyContinue
-    if ($ghCli) {
+    $ghExe = "gh"
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+        if (Test-Path "C:\Program Files\GitHub CLI\gh.exe") {
+            $ghExe = "C:\Program Files\GitHub CLI\gh.exe"
+        } else {
+            $ghExe = $null
+        }
+    }
+    if ($ghExe) {
         Write-Host "Subiendo $zipOutput a GitHub Releases para el tag $Version..." -ForegroundColor Cyan
         # Si el release no existe, lo crea con el asset; si ya existe, sube/reemplaza el asset
-        & gh release upload $Version $zipOutput --clobber
+        & $ghExe release upload $Version $zipOutput --clobber
         if ($LASTEXITCODE -ne 0) {
             Write-Host "Release no encontrado o error. Intentando crear release y adjuntar binario..." -ForegroundColor Gray
-            & gh release create $Version $zipOutput --title "Ramos Delivery Simulator $Version" --prerelease --generate-notes
+            & $ghExe release create $Version $zipOutput --title "Ramos Delivery Simulator $Version" --prerelease --generate-notes
         }
         if ($LASTEXITCODE -eq 0) {
             Write-Host "Asset subido con exito a GitHub Releases!" -ForegroundColor Green

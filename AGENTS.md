@@ -82,6 +82,15 @@ C:\Users\facun\AppData\Local\Programs\Python\Python39\python.exe tools/test_dens
 ### Paso 6: Actualización del Roadmap
 - Actualizar `docs/roadmap.md` marcando los ítems completados o agregando las nuevas tareas identificadas.
 
+### Paso 7: Publicación y Generación de Releases (Responsabilidad del Agente)
+- Cuando el usuario solicite "generar una versión", "publicar release", o crear un tag (ej. `alpha-X.Y.Z`):
+  1. El agente **debe ejecutar el pipeline completo** con el switch de publicación:
+     ```powershell
+     powershell -ExecutionPolicy Bypass -File tools/build_release.ps1 -Version "alpha-X.Y.Z" -Publish
+     ```
+  2. Este script corre el Test Gate, empaqueta el PCK, vincula el ejecutable de Windows, comprime el `.zip` distribuible, genera el tag y **lo sube automáticamente a GitHub Releases con GitHub CLI (`gh`)**.
+  3. El usuario nunca debe tener que arrastrar o subir manualmente archivos a GitHub Releases.
+
 ---
 
 ## 5. Reglas de Seguridad y Anti-Regresión ("Never Do")
