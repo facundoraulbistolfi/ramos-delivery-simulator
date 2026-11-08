@@ -2,7 +2,8 @@
 param(
     [string]$Version = "alpha-0.0.1",
     [switch]$SkipTests,
-    [switch]$CreateTag
+    [switch]$CreateTag,
+    [switch]$Publish
 )
 
 $ErrorActionPreference = "Stop"
@@ -93,10 +94,44 @@ Write-Host ("   RELEASE {0} GENERADO CON EXITO!" -f $Version) -ForegroundColor G
 Write-Host ("   Archivo: {0} ({1} MB)" -f $zipOutput, $zipSizeMb) -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green
 
-# 6. Crear tag en Git si se solicito
-if ($CreateTag) {
-    Write-Host "`nCreando tag en Git: $Version..." -ForegroundColor Cyan
-    git tag -a $Version -m ("Release {0}" -f $Version)
-    Write-Host "Para subir el tag a GitHub ejecuta:" -ForegroundColor Yellow
-    Write-Host ("  git push origin {0}" -f $Version) -ForegroundColor White
+# 6. Crear tag en Git si se solicito o si se va a publicar
+if ($CreateTag -or $Publish) {
+    $existingTag = git tag -l $Version
+    if (-not $existingTag) {
+        Write-Host "`nCreando tag en Git: $Version..." -ForegroundColor Cyan
+        git tag -a $Version -m ("Release {0}" -f $Version)
+    }
+    if ($Publish) {
+        Write-Host "Pusheando tag a GitHub ($Version)..." -ForegroundColor Cyan
+        git push origin $Version
+    } else {
+        Write-Host "Para subir el tag a GitHub ejecuta:" -ForegroundColor Yellow
+        Write-Host ("  git push origin {0}" -f $Version) -ForegroundColor White
+    }
+}
+
+# 7. Publicar automáticamente en GitHub Releases si se paso -Publish
+if ($Publish) {
+    Write-Host "`n[Publicacion en GitHub Releases]" -ForegroundColor Yellow
+    $ghCli = Get-Command gh -ErrorAction SilentlyContinue
+    if ($ghCli) {
+        Write-Host "Subiendo $zipOutput a GitHub Releases para el tag $Version..." -ForegroundColor Cyan
+        # Si el release no existe, lo crea con el asset; si ya existe, sube/reemplaza el asset
+        & gh release upload $Version $zipOutput --clobber
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Release no encontrado o error. Intentando crear release y adjuntar binario..." -ForegroundColor Gray
+            & gh release create $Version $zipOutput --title "Ramos Delivery Simulator $Version" --prerelease --generate-notes
+        }
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Asset subido con exito a GitHub Releases!" -ForegroundColor Green
+        } else {
+            Write-Warning "No se pudo subir el archivo con 'gh'. Verifica que tengas sesion iniciada con 'gh auth login'."
+        }
+    } else {
+        Write-Warning "GitHub CLI ('gh') no esta instalado en tu sistema."
+        Write-Host "Para que las proximas versiones se suban solas a GitHub:" -ForegroundColor Yellow
+        Write-Host "  1. Ejecuta: winget install --id GitHub.cli -e" -ForegroundColor White
+        Write-Host "  2. Inicia sesion una unica vez: gh auth login" -ForegroundColor White
+        Write-Host "  3. Luego ejecuta: .\tools\build_release.ps1 -Version `"$Version`" -Publish" -ForegroundColor White
+    }
 }
